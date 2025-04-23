@@ -9,7 +9,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 from .terminal_colors import tcols
-from fast_jetclass.data import data
+from fast_jetclass.data import FullJetData
 
 
 def make_output_directories(locations: list, outdir: str):
@@ -32,7 +32,7 @@ def make_output_directory(location: str, outdir: str) -> str:
 def import_data(config: dict, train: bool):
     """Imports the jet data, ready for training."""
     print(tcols.OKGREEN + "Importing data... " + tcols.ENDC, end="")
-    jet_data = data.HLS4MLData150(**config, train=train)
+    jet_data = FullJetData(**config, train=train)
 
     print(tcols.OKGREEN, end="")
     print("training data imported!" if train else "validation data imported!")

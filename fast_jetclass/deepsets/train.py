@@ -17,7 +17,6 @@ from fast_jetclass.util import util
 from fast_jetclass.util import plots
 from fast_jetclass.util.terminal_colors import tcols
 from fast_jetclass.deepsets import util as dsutil
-from fast_jetclass.data.data import HLS4MLData150
 
 # Set keras float precision. Default is float32.
 # tf.keras.backend.set_floatx("float64")
@@ -94,6 +93,6 @@ def plot_model_performance(history: dict, outdir: str):
     plots.loss_vs_epochs(outdir, history["loss"], history["val_loss"])
     plots.accuracy_vs_epochs(
         outdir,
-        history["categorical_accuracy"],
-        history["val_categorical_accuracy"],
+        history["accuracy"],
+        history["val_accuracy"],
     )

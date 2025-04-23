@@ -111,3 +111,38 @@ class DeepSetsInv(keras.Model):
         logits = self.output_layer(rho_output)
 
         return logits
+
+""""
+class SC8DeepSetsInv(DeepSetsInv):
+    ""Deep sets permutation invariant graph network https://arxiv.org/abs/1703.06114.
+
+    Attributes:
+        input_size: Tuple with the shape of the input data.
+        phi_layers: List of number of nodes for each layer of the phi network.
+        rho_layers: List of number of nodes for each layer of the rho network.
+        activ: String that specifies Activation function to use between the dense layers.
+        aggreg: String that specifies the type of aggregator to use after the phi net.
+        output_dim: The output dimension of the network. For a supervised task, this is
+            equal to the number of classes.
+    ""
+
+    def __init__(
+        self,
+        input_size: tuple,
+        phi_layers: list = [32, 32, 32],
+        rho_layers: list = [16],
+        output_dim: int = 5,
+        activ: str = "relu",
+        aggreg: str = "mean",
+    ):
+        super(SC8DeepSetsInv, self).__init__(
+            input_size=input_size,
+            phi_layers=phi_layers,
+            rho_layers=rho_layers,
+            output_dim=output_dim,
+            activ=activ,
+            aggreg=aggreg,
+        )
+    
+    def call(self):
+    """

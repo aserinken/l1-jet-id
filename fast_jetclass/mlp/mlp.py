@@ -80,7 +80,7 @@ class MLPRegular(keras.Model):
         self.flops = {"layer": 0, "activation": 0}
 
         self._build_mlp(**kwargs)
-        self.output_layer = KL.Dense(self.output_dim)
+        self.output_layer = KL.Dense(self.output_dim)#, activation="sigmoid")  #Here I addd the activation function to the output layer. before it was: self.output_layer = KL.Dense(self.output_dim, activation="sigmoid")
 
     def _build_mlp(self, **kwargs):
         input_shape = list(self.input_size[1:])

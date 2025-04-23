@@ -31,7 +31,7 @@ def choose_deepsets(deepsets_type: str, model_hyperparams: dict) -> keras.models
     switcher = {
         "invariant": lambda: DeepSetsInv(**model_hyperparams),
         "qinvariant": lambda: DeepSetsInvQuantised(**model_hyperparams),
-        "sinvariant": lambda: deepsets_invariant_synth(**model_hyperparams),
+        "sinvariant": lambda: deepsets_invariant_synth(**model_hyperparams)
     }
     model = switcher.get(deepsets_type, lambda: None)()
 

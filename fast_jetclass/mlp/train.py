@@ -18,7 +18,6 @@ from fast_jetclass.util import util
 from fast_jetclass.util import plots
 from fast_jetclass.util.terminal_colors import tcols
 from fast_jetclass.mlp import util as mlputil
-from fast_jetclass.data.data import HLS4MLData150
 
 # Set keras float precision. Default is float32.
 # tf.keras.backend.set_floatx("float64")
@@ -32,6 +31,8 @@ def main(config: dict):
     train_data = util.import_data(config["data_hyperparams"], train=True)
     batch_size = config["training_hyperparams"]["batch_size"]
     input_size = (batch_size, train_data.nconst, train_data.nfeats)
+    #print the input size
+    print(tcols.OKBLUE + "\n\nINPUT SIZE:" + tcols.ENDC, input_size)
 
     model, model_callbacks = build_model(config, train_data.njets, input_size)
     initial_weights = model.get_weights()
@@ -95,6 +96,6 @@ def plot_model_performance(history: dict, outdir: str):
     plots.loss_vs_epochs(outdir, history["loss"], history["val_loss"])
     plots.accuracy_vs_epochs(
         outdir,
-        history["categorical_accuracy"],
-        history["val_categorical_accuracy"],
+        history["accuracy"],
+        history["val_accuracy"],
     )

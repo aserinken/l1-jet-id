@@ -18,7 +18,7 @@ from fast_jetclass.util import util
 from fast_jetclass.util import plots
 from fast_jetclass.util import flops
 from fast_jetclass.util.terminal_colors import tcols
-from fast_jetclass.data.data import HLS4MLData150
+from fast_jetclass.data import FullJetData
 
 # Set keras float precision. Default is float32.
 # tf.keras.backend.set_floatx("float64")
@@ -32,7 +32,6 @@ def main(args):
 
     # The data configuration should be the same for all kfolds, so take it from one.
     valid_data = util.import_data(hyperparams["data_hyperparams"], train=False)
-    valid_data.shuffle_constituents(args.seed)
 
     util.nice_print_dictionary(
         "Testing model w/ hps:", hyperparams["model_hyperparams"]
@@ -54,7 +53,7 @@ def main(args):
     compute_average_metrics(kfold_metrics, args.root_dir)
 
 
-def evaluate_model(data: HLS4MLData150, hyperparams: dict, model_dir: str, seed: int):
+def evaluate_model(data: FullJetData, hyperparams: dict, model_dir: str, seed: int):
     """Evaluate a model given its hyperparameters."""
     model = import_model(model_dir, hyperparams)
     plots_dir = util.make_output_directories(model_dir, f"plots_{seed}")
@@ -120,7 +119,7 @@ def save_model_weights(model_dir: str, model: keras.Model):
     model.save_weights(weights_file_path, save_format="h5")
 
 
-def run_inference(model: keras.Model, data: HLS4MLData150, plots_dir: str):
+def run_inference(model: keras.Model, data: FullJetData, plots_dir: str):
     """Computes predictions of a model and saves them to numpy files."""
     y_pred = model.predict(data.x)
     if isinstance(model.layers[-1], keras.layers.Dense):
