@@ -1,10 +1,10 @@
 ---
-outdir: 'deepsets_8bit_16const_test'
+outdir: 'deepsets_8bit_15const_qcd'
 data_hyperparams:
 
   root: "/work/aserinke/l1-jet-id/test"
 
-  nconst: 16
+  nconst: 15
 
   pdg_order: [22, -11, 11, -13, 13, 130, -211, 211]
 
@@ -16,9 +16,9 @@ data_hyperparams:
 
   datasets:
     bkg:
-      - "/work/aserinke/SC8_Data/SingleNeutrino/1.root"
-      - "/work/aserinke/SC8_Data/SingleNeutrino/2.root"
-      - "/work/aserinke/SC8_Data/SingleNeutrino/3.root"
+      - "/t3home/aserinke/eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/Phase2Spring24_QCD_Pt15To3000_PU200/1.root"
+      - "/t3home/aserinke/eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/Phase2Spring24_QCD_Pt15To3000_PU200/2.root"
+      - "/t3home/aserinke/eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/Phase2Spring24_QCD_Pt15To3000_PU200/3.root"
     sig:
       - "/work/aserinke/SC8_Data/lightHbb/lightHbb_M20to80_Pt50to200.root"
 

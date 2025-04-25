@@ -23,7 +23,8 @@ import tensorflow.keras.layers as KL
 from fast_jetclass.util import util
 from fast_jetclass.util import plots
 from fast_jetclass.util.terminal_colors import tcols
-from fast_jetclass.data.data import HLS4MLData150
+from fast_jetclass.data.hls4ml150 import HLS4MLData150
+from fast_jetclass.data.FullJetData import FullJetData
 
 
 def main(args, synth_config: dict):
@@ -39,7 +40,7 @@ def main(args, synth_config: dict):
     # More are not really needed and it increases the runtime of this script by a lot.
     valid_data.x = valid_data.x[:6000]
     valid_data.y = valid_data.y[:6000]
-    valid_data.shuffle_constituents(args.seed)
+    #valid_data.shuffle_constituents(args.seed)
     model = import_model(args.model_dir, hyperparams)
 
     print(tcols.OKGREEN + "\nCONFIGURING SYNTHESIS\n" + tcols.ENDC)
@@ -118,7 +119,7 @@ def calculate_accuracy(y_pred: np.ndarray, y_true: np.ndarray):
     return acc.result().numpy()
 
 
-def run_inference(model: keras.Model, data: HLS4MLData150):
+def run_inference(model: keras.Model, data: HLS4MLData150 | FullJetData):
     """Computes predictions of a model and saves them to numpy files."""
     y_pred = model.predict(data.x)
     if isinstance(model.layers[-1], keras.layers.Dense):

@@ -57,9 +57,10 @@ class FullJetData(object):
         super().__init__()
         self.root = Path(root)
         self.data_dir = self.root
-        self.preprocessed_path = self.root / "preprocessed"
-        self.raw_path = self.root / "raw"
-        self.processed = self.root / "processed"
+        self.top_level = self.root / str(nconst)
+        self.preprocessed_path = self.top_level / "preprocessed"
+        self.raw_path = self.top_level / "raw"
+        self.processed = self.top_level / "processed"
         self.nconst = nconst
         self.train = train
         self.type = "train" if train else "val"
@@ -85,10 +86,15 @@ class FullJetData(object):
         self.puppi_bkg_ak = None
         self.puppi_sig_ak = None
 
+        self._check_create_top_level_folder()
+        self._check_create_folders()
+
         #If we run the code for the val then we can just load the data from the preprocessed folder
         if self.train == False:
             print("Loading data for validation/test from preprocessed folder.")
             self.load_proc_test_data()
+            self.njets = self.x.shape[0]
+            self.nfeats = self.x.shape[-1]
             return
 
         if self._check_preprocessed_data_exists()==True:
@@ -129,6 +135,35 @@ class FullJetData(object):
 
         self.njets = self.x.shape[0]
         self.nfeats = self.x.shape[-1]
+
+    # ---------------------------------------------------------------------
+    # A) If folder named "self.nconst" exists if not create it in self.root
+    # ---------------------------------------------------------------------
+    def _check_create_top_level_folder(self) -> None:
+        """
+        Check if the top-level folder named f"{self.nconst}" exists in self.root, if not create it.
+        """
+        if not self.top_level.is_dir():
+            print(f"Creating top-level folder: {self.top_level}")
+            os.makedirs(self.top_level)
+        else:
+            print(f"Top-level folder already exists: {self.top_level}")
+    # ---------------------------------------------------------------------
+    # B) Check if the folders "raw", "preprocessed", "processed" exist in self.top_level if not create them inside self.top_level
+    # ---------------------------------------------------------------------
+    def _check_create_folders(self) -> None:
+        """
+        Check if the folders "raw", "preprocessed", "processed" exist in self.top_level, if not create them inside self.top_level.
+        """
+        for folder in ["raw", "preprocessed", "processed"]:
+            folder_path = self.top_level / folder
+            if not folder_path.is_dir():
+                print(f"Creating folder: {folder_path}")
+                os.makedirs(folder_path)
+            else:
+                print(f"Folder already exists: {folder_path}")
+    # ---------------------------------------------------------------------
+    
 
     def _check_preprocessed_data_exists(self) -> bool:
         """
@@ -196,8 +231,8 @@ class FullJetData(object):
             puppi = puppi_raw  # Or do any transform you want
 
         # Save each as Parquet
-        sc8_name = f"{key}_sc8Emu_{file_index}.pq"
-        puppi_name = f"{key}_puppi_{file_index}.pq"
+        sc8_name = f"{key}_sc8Emu_{self.nconst}_{file_index}.pq"
+        puppi_name = f"{key}_puppi_{self.nconst}_{file_index}.pq"
         self._save_parquet(sc8, sc8_name)
         self._save_parquet(puppi, puppi_name)
 
@@ -323,14 +358,14 @@ class FullJetData(object):
         print("[_load_parquet] Loading sc8/puppi from Parquet...")
     
         # For background sc8
-        self.sc8_bkg_ak = self._load_parquet_files("bkg_sc8Emu_")
+        self.sc8_bkg_ak = self._load_parquet_files(f"bkg_sc8Emu_{self.nconst}_")
         # For puppi background
-        self.puppi_bkg_ak = self._load_parquet_files("bkg_puppi_")
+        self.puppi_bkg_ak = self._load_parquet_files(f"bkg_puppi_{self.nconst}_")
     
         # For signal sc8
-        self.sc8_sig_ak = self._load_parquet_files("sig_sc8Emu_")
+        self.sc8_sig_ak = self._load_parquet_files(f"sig_sc8Emu_{self.nconst}_")
         # For puppi signal
-        self.puppi_sig_ak = self._load_parquet_files("sig_puppi_")
+        self.puppi_sig_ak = self._load_parquet_files(f"sig_puppi_{self.nconst}_")
     
         # Optional: print quick summary
         print("  sc8_bkg:", type(self.sc8_bkg_ak), " length:", None if self.sc8_bkg_ak is None else len(self.sc8_bkg_ak))
@@ -517,7 +552,7 @@ class FullJetData(object):
     
         one_hot_fields = [f for f in first_ev_constits.fields if f.startswith("pdg_")]
         for f_ in one_hot_fields[:3]:  # just example for the first few PDG fields
-            vals_0to3 = [first_ev_constits[f_][str(j)] for j in range(4)]
+            vals_0to3 = [first_ev_constits[f_][str(j)] for j in range(2)]
             print(f"  {f_}, daughters 0..3 => {vals_0to3}")
 
     # -------------------------------------------------------------

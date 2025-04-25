@@ -165,7 +165,7 @@ cython_debug/
 
 # mac stuff
 .DS_Store
-._.DS_Stpre
+._.DS_Store
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
