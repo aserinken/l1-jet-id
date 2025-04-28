@@ -14,18 +14,23 @@ class FullJetData(object):
     Data Class for importing and processing full jet data.
 
     Raw data is available in /eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/
+    But the necessary raw files were uploaded to a local folder.
+    If one has access to the EOS folder, one can set the path to the EOS folders
 
     Args:
-        root: The root directory of the data. It should contain a 'raw' and 'processed'
-            folder with raw and processed data. Otherwise, these will be generated.
+        root: The root directory of the data. It should contain a 'number of constituents' folder with 
+            'raw' and 'preprocessed' folders inside. If the folders does not exist, they will be created. 
         nconst: Number of constituents to pad/truncate to.
-        pdg_order: PDG codes to one-hot encode.
+        pdg_order: PDG codes to one-hot encode. By default, it is set to [22, -11, 11, -13, 13, 130, -211, 211] which is the same order as in the SC4 algorithm.
         norm: Chosen normalization.
         train: Whether this is training data or validation/test.
         kfolds: Number of splits for k-fold cross-validation.
         seed: Random seed for reproducibility.
-        datasets: Dictionary with keys (e.g. "bkg", "sig") and values = list of ROOT paths.
+        datasets: Dictionary with keys ("bkg", "sig") and values = list of ROOT paths.
         test_size: Fraction for train/test split.
+        random_state: Random state for train/test split.
+        padding_value: Value to use for padding the data. Default it is set to 0. 
+            The original value that is used for missing values inside the ROOT files is -1.
     """
 
     def __init__(
@@ -37,119 +42,129 @@ class FullJetData(object):
         train: bool = True,
         kfolds: int = 0,
         seed: int = 42,
-        datasets: dict = None,  # If needed
-        test_size: float = 0.2,  # If needed
+        datasets: dict = None,  
+        test_size: float = 0.2,  
         random_state: int = 42,
         padding_value: float = 0,
     ):
-        """
-        Args:
-            root: Directory to store/load the data.
-            nconst: Number of constituents to pad/truncate to.
-            pdg_order: PDG codes to one-hot encode.
-            norm: Chosen normalization.
-            train: Whether this is training data or validation/test.
-            kfolds: Number of splits for k-fold cross-validation.
-            seed: Random seed for reproducibility.
-            datasets: Dictionary with keys (e.g. "bkg", "sig") and values = list of ROOT paths.
-            test_size: Fraction for train/test split.
-        """
         super().__init__()
         self.root = Path(root)
-        self.data_dir = self.root
-        self.top_level = self.root / str(nconst)
-        self.preprocessed_path = self.top_level / "preprocessed"
-        self.raw_path = self.top_level / "raw"
-        self.processed = self.top_level / "processed"
         self.nconst = nconst
-        self.train = train
-        self.type = "train" if train else "val"
-        self.norm = norm
-        self.seed = seed
-        self.kfolds = kfolds
         self.pdg_order = pdg_order if pdg_order else [22, -11, 11, -13, 13, 130, -211, 211]
+        self.norm = norm       
+        self.train = train
+        self.kfolds = kfolds
+        self.seed = seed
+        self.datasets = datasets if datasets else {}
         self.random_state = random_state
+        self.test_size = test_size
         self.padding_value = padding_value
 
-        self.datasets = datasets if datasets else {}
-        self.test_size = test_size
+    # ---------------------------------------------------------------------
+    # A) Define extra attributes
+    # ---------------------------------------------------------------------
+        # Paths for top level folder
+        self.top_level = self.root / f"{nconst}const"
 
-        self.proc_output_name = (f"{self.type}_{self.norm}_{self.nconst}const")
+       # Paths for raw, preprocessed and processed folders inside the top level folder
+        self.type = "train" if train else "val"        
+        self.raw_path = self.top_level / "raw"
+        self.preprocessed_path = self.top_level / "preprocessed"
+        self.processed_path = self.top_level / "processed"
+
+        # Names for the output files inside the preprocessed and processed folders
         self.preproc_output_name = (f"{self.nconst}const")
+        self.proc_output_name = (f"{self.type}_{self.norm}_{self.nconst}const")
+
         # Final data
         self.x = None
         self.y = None
 
-         # Internal placeholders
+        # Internal placeholders
         self.sc8_bkg_ak = None
         self.sc8_sig_ak = None
         self.puppi_bkg_ak = None
         self.puppi_sig_ak = None
 
+    # ---------------------------------------------------------------------
+    # B) Check if structure of the folders is correct, if not create them
+    # ---------------------------------------------------------------------
         self._check_create_top_level_folder()
         self._check_create_folders()
 
-        #If we run the code for the val then we can just load the data from the preprocessed folder
+    # ---------------------------------------------------------------------
+    # C) Run the pipeline
+    # ---------------------------------------------------------------------
+        # Check if the data is for training or validation/test
         if self.train == False:
-            print("Loading data for validation/test from preprocessed folder.")
+            print("Loading data for validation/test from processed folder.")
             self.load_proc_test_data()
             self.njets = self.x.shape[0]
             self.nfeats = self.x.shape[-1]
             return
 
+        # Check if the preprocessed data exists and load it, otherwise run the full pipeline
         if self._check_preprocessed_data_exists()==True:
             print("Preprocessed data found. Loading from 'preprocessed' folder.")
+            # Check if the processed data exists and load it, otherwise run the pipeline with the preprocessed data
             if self._check_processed_data_exists()== True:
                 print("Processed data found. Loading from 'processed' folder.")
+                # 1) Load the processed data
                 self.load_normalized_data()
+                # 2) K-fold splitting
                 self._split_kfold()
             else:
                 print("Processed data not found. Loading from 'preprocessed' folder.")
+                # 1) Load the preprocessed data
                 self.load_3d_data()
-                #6) Combine bkg/sig => X, y
+                # 2) Combine bkg/sig => X, y
                 self._combine_sig_bkg()
-                #7) Normalize or split
+                # 3) Normalize or split
                 self._normalize_data()
-                #8) K-fold splitting
+                # 4) K-fold splitting
                 self._split_kfold()
-
         else:
             print("No preprocssed data found. Running full pipeline.")
-            #1) Convert ROOT -> Parquet
+            # 1) Convert ROOT -> Parquet
             self._process_root_files()
-            #2) Load sc8/puppi from Parquet
+            # 2) Load sc8/puppi from Parquet
             self._load_parquet()
-            #3) Match sc8 to Puppi
+            # 3) Match sc8 to Puppi
             self._match_puppi()
-            #4) One-hot PDG
+            # 4) One-hot PDG
             self._encode_pdg()
-            #5) Pad => 3D array
+            # 5) Akward -> 3D numpy and save
             self._pad_to_3d()
+            # 6) Load the 3D data
             self.load_3d_data()
-            #6) Combine bkg/sig => X, y
+            #7) Combine bkg/sig => X, y
             self._combine_sig_bkg()
-            #7) Normalize or split
+            #8) Normalize or split
             self._normalize_data()
-            #8) K-fold splitting
+            #9) K-fold splitting
             self._split_kfold()
 
+        # Set the number of jets and features for later use
         self.njets = self.x.shape[0]
         self.nfeats = self.x.shape[-1]
 
     # ---------------------------------------------------------------------
-    # A) If folder named "self.nconst" exists if not create it in self.root
+
+    # ---------------------------------------------------------------------
+    # 1) Check if self.top_level folder exists, if not create it
     # ---------------------------------------------------------------------
     def _check_create_top_level_folder(self) -> None:
         """
-        Check if the top-level folder named f"{self.nconst}" exists in self.root, if not create it.
+        Check if the top-level folder named f"{self.nconst}const" exists in self.root, if not create it.
         """
         if not self.top_level.is_dir():
             print(f"Creating top-level folder: {self.top_level}")
             os.makedirs(self.top_level)
         else:
             print(f"Top-level folder already exists: {self.top_level}")
+
     # ---------------------------------------------------------------------
-    # B) Check if the folders "raw", "preprocessed", "processed" exist in self.top_level if not create them inside self.top_level
+    # 2) Check if the folders "raw", "preprocessed", "processed" exist in self.top_level if not create them inside self.top_level
     # ---------------------------------------------------------------------
     def _check_create_folders(self) -> None:
         """
@@ -162,37 +177,38 @@ class FullJetData(object):
                 os.makedirs(folder_path)
             else:
                 print(f"Folder already exists: {folder_path}")
-    # ---------------------------------------------------------------------
-    
 
+    # ---------------------------------------------------------------------
+    # 3) Check if the preprocessed data exists
+    # ---------------------------------------------------------------------
     def _check_preprocessed_data_exists(self) -> bool:
         """
-        Check if the preprocessed data directory exists.
+        Check if the preprocessed data exists in the preprocessed folder and if yes, return True.
         """
-        proc_dir = self.preprocessed_path
         needed_files = [
             f"bkg_3d_{self.preproc_output_name}.npy",
             f"sig_3d_{self.preproc_output_name}.npy"]
-        if not proc_dir.is_dir():
+        if not self.preprocessed_path.is_dir():
             return False
-        return all((proc_dir / f).is_file() for f in needed_files)
+        return all((self.preprocessed_path / file_name).is_file() for file_name in needed_files)
     
+    # ---------------------------------------------------------------------
+    # 4) Check if the processed data exists
+    # ---------------------------------------------------------------------
     def _check_processed_data_exists(self) -> bool:
         """
-        Check if the processed data directory exists.
+        Check if the processed data exists in the processed folder and if yes, return True.
         """
-        proc_dir = self.processed
         needed_files = [
             f"proc_{self.proc_output_name}.npy",
             f"proc_labels_{self.proc_output_name}.npy"
         ]
-        if not proc_dir.is_dir():
+        if not self.processed_path.is_dir():
             return False
-        return all((proc_dir / f).is_file() for f in needed_files)
-
+        return all((self.processed_path / file_name).is_file() for file_name in needed_files)
 
     # ---------------------------------------------------------------------
-    # A) Process all ROOT files -> Parquet
+    # 5) Process all ROOT files -> Parquet
     # ---------------------------------------------------------------------
     def _process_root_files(self) -> None:
         """
@@ -205,30 +221,37 @@ class FullJetData(object):
     def _process_dataset(self, key, file_list) -> None:
         """
         Loop over a single dataset’s file list and convert each ROOT file to Parquet.
-        """
-        
-        for i, root_path in enumerate(file_list):
+
+        Args:
+            key: The key for the dataset ("bkg" or "sig").
+            file_list: List of ROOT files to process.
+        """     
+        for file_index, root_path in enumerate(file_list):
             if not os.path.exists(root_path):
                 print(f"  file not found: {root_path}, skipping.")
                 continue
-            self._process_single_file(key, i, root_path)
+            self._process_single_file(key, file_index, root_path)
 
     def _process_single_file(self, key, file_index, root_path) -> None:
         """
         Convert one ROOT file (both sc8 and puppi) into Parquet.
+
+        Args:
+            key: The key for the dataset ("bkg" or "sig").
+            file_index: Index of the file in the list.
+            root_path: Path to the indexed ROOT file.
         """
         print(f"  Opening {root_path}")
         with uproot.open(root_path) as f:
             tree = f["Events"]
 
-            # sc8
+            # Get the SC8 jets
             sc8_raw = self._get_branch(tree, "sc8PuppiEmuJets_")
             sc8 = self._transform_jets(sc8_raw)
             sc8 = ak.with_field(sc8, np.sqrt(sc8.mass), where="mass")
 
-            # puppi
-            puppi_raw = self._get_branch(tree, "puppiCands_")
-            puppi = puppi_raw  # Or do any transform you want
+            # Get the Puppi jets for later matching
+            puppi = self._get_branch(tree, "puppiCands_")
 
         # Save each as Parquet
         sc8_name = f"{key}_sc8Emu_{self.nconst}_{file_index}.pq"
@@ -692,12 +715,12 @@ class FullJetData(object):
         self.x = self.x_train
         self.y = self.y_train
         #save the normalized data
-        np.save(os.path.join(self.processed, f"proc_train_{self.preproc_output_name}.npy"), self.x)
-        np.save(os.path.join(self.processed, f"proc_labels_train_{self.preproc_output_name}.npy"), self.y)
+        np.save(os.path.join(self.processed_path, f"proc_train_{self.preproc_output_name}.npy"), self.x)
+        np.save(os.path.join(self.processed_path, f"proc_labels_train_{self.preproc_output_name}.npy"), self.y)
 
         #save the normalized data
-        np.save(os.path.join(self.processed, f"proc_test_{self.preproc_output_name}.npy"), self.x_test)
-        np.save(os.path.join(self.processed, f"proc_labels_test_{self.preproc_output_name}.npy"), self.y_test)
+        np.save(os.path.join(self.processed_path, f"proc_test_{self.preproc_output_name}.npy"), self.x_test)
+        np.save(os.path.join(self.processed_path, f"proc_labels_test_{self.preproc_output_name}.npy"), self.y_test)
     
         print("After normalization, shapes:")
         print("  self.x:", self.x.shape, " self.y:", self.y.shape)
@@ -728,7 +751,7 @@ class FullJetData(object):
             if stage == "before":
                 plt.savefig(os.path.join(self.preprocessed_path, f"{feat_name}_{stage}.png"))
             else:
-                plt.savefig(os.path.join(self.processed, f"{feat_name}_{stage}.png"))
+                plt.savefig(os.path.join(self.processed_path, f"{feat_name}_{stage}.png"))
             plt.close()
         print(f"Plotted all features for {stage} normalization.")
             
@@ -736,8 +759,8 @@ class FullJetData(object):
         """
         Optional method to reload your saved normalized data from disk.
         """
-        train_path = os.path.join(self.processed, f"train_{self.proc_output_name}.npy")
-        test_path = os.path.join(self.processed, f"test_{self.proc_output_name}.npy")
+        train_path = os.path.join(self.processed_path, f"train_{self.proc_output_name}.npy")
+        test_path = os.path.join(self.processed_path, f"test_{self.proc_output_name}.npy")
 
         if os.path.isfile(train_path):
             self.x = np.load(train_path)
@@ -747,8 +770,8 @@ class FullJetData(object):
             self.x = np.load(test_path)
             print(f"Loaded x_test from {test_path} with shape {self.x.shape}")
         # Load labels   
-        train_labels_path = os.path.join(self.processed, f"train_labels_{self.proc_output_name}.npy")
-        test_labels_path = os.path.join(self.processed, f"test_labels_{self.proc_output_name}.npy")
+        train_labels_path = os.path.join(self.processed_path, f"train_labels_{self.proc_output_name}.npy")
+        test_labels_path = os.path.join(self.processed_path, f"test_labels_{self.proc_output_name}.npy")
 
         if os.path.isfile(train_labels_path):
             self.y = np.load(train_labels_path)
@@ -880,8 +903,8 @@ class FullJetData(object):
         """
         Load the test data from the processed folder.
         """
-        test_path = os.path.join(self.processed, f"proc_test_{self.preproc_output_name}.npy")
-        test_labels_path = os.path.join(self.processed, f"proc_labels_test_{self.preproc_output_name}.npy")
+        test_path = os.path.join(self.processed_path, f"proc_test_{self.preproc_output_name}.npy")
+        test_labels_path = os.path.join(self.processed_path, f"proc_labels_test_{self.preproc_output_name}.npy")
 
         if os.path.isfile(test_path):
             self.x = np.load(test_path)
@@ -899,6 +922,3 @@ class FullJetData(object):
         print("Data shape X:", None if self.x is None else self.x.shape)
         print("Data shape y:", None if self.y is None else self.y.shape)
         print("Number of folds:", self.kfolds)
-
-
-
