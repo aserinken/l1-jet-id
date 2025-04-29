@@ -846,8 +846,8 @@ class FullJetData(object):
 
         # 5) Scale only those columns
         scaler = RobustScaler()
-        X_train[:, col_idxs] = scaler.fit_transform(X_train[:, col_idxs])
-        X_test[:,  col_idxs] = scaler.transform(X_test[:,  col_idxs])
+        #X_train[:, col_idxs] = scaler.fit_transform(X_train[:, col_idxs])
+        #X_test[:,  col_idxs] = scaler.transform(X_test[:,  col_idxs])
 
         # --- DEBUG #3: puppiWeight summary AFTER scaling (should be unchanged) ---
         tr_pw_after = X_train.reshape(-1, nC, nF)[:, :, pw_idx]

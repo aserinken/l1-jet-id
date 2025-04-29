@@ -67,7 +67,7 @@ def find_nearest(array: np.ndarray, value: float):
 
 def roc_curves(outdir: str, y_pred: np.ndarray, y_test: np.ndarray):
     """Plot the ROC curves for the labels of the jet data set."""
-    labels = ["2prong", "1prong"]
+    labels = ["background", "2prong"]
     cols = ["#648FFF", "#785EF0"]
     tpr_baseline = np.linspace(0.025, 0.99, 100)
     fprs = []
@@ -114,7 +114,7 @@ def roc_curves_uncert(
     outdir: str,
 ):
     """Plots ROC curves given fprs and tprs for each class."""
-    labels = ["2prong", "1prong"]
+    labels = ["background", "2prong"]
     cols = ["#648FFF", "#785EF0"]
     tpr_baseline = np.linspace(0.025, 0.99, 100)
     for idx, label in enumerate(labels):
@@ -145,7 +145,7 @@ def roc_curves_uncert(
 
 def dnn_output(outdir: str, y_pred: np.ndarray):
     """Plots the output of the last part (fc) of the interaction network."""
-    labels = ["2prong", "1prong"]
+    labels = ["background", "2prong"]
     cols = ["#648FFF", "#785EF0"]
     bins = np.linspace(0.0, 1.0, 20)
     for idx, label in enumerate(labels):

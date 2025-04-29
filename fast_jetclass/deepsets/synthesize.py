@@ -6,6 +6,8 @@ import os
 import collections.abc
 import json
 import contextlib
+import matplotlib.pyplot as plt
+from sklearn import metrics
 
 import numpy as np
 import tensorflow as tf
@@ -38,8 +40,8 @@ def main(args, synth_config: dict):
 
     # Take the first 6000 events to do the diagnosis of the synthesis.
     # More are not really needed and it increases the runtime of this script by a lot.
-    valid_data.x = valid_data.x[:6000]
-    valid_data.y = valid_data.y[:6000]
+    valid_data.x = valid_data.x
+    valid_data.y = valid_data.y
     #valid_data.shuffle_constituents(args.seed)
     model = import_model(args.model_dir, hyperparams)
 
@@ -68,6 +70,7 @@ def main(args, synth_config: dict):
         output_dir=synthesis_dir,
         part="xcvu13p-flga2577-2-e",
         io_type="io_parallel",
+        backend="Vitis",
     )
 
     hls_model.compile()
@@ -83,9 +86,97 @@ def main(args, synth_config: dict):
     acc = calculate_accuracy(y_pred, valid_data.y)
     y_pred = hls_model.predict(valid_data.x)
     acc_synth = calculate_accuracy(y_pred, valid_data.y)
+
+    plots_dir = os.path.join(synthesis_dir, "plots")
+    os.makedirs(plots_dir, exist_ok=True)
+    _= plots.roc_curves(plots_dir, y_pred, valid_data.y)
+    _= roc_curves_comparison(
+        plots_dir,
+        y_pred_qkeras=run_inference(model, valid_data),
+        y_pred_hls4ml=hls_model.predict(valid_data.x),
+        y_test=valid_data.y
+    )
+    print()
     print(f"Accuracy model: {acc:.3f}")
     print(f"Accuracy synthed model: {acc_synth:.3f}")
     print(f"Accuracy ratio: {acc_synth/acc:.3f}")
+
+
+#Function which makes the ROC curves for the model and the synthesized model.
+def roc_curves_comparison(outdir: str,
+                          y_pred_qkeras: np.ndarray,
+                          y_pred_hls4ml: np.ndarray,
+                          y_test: np.ndarray):
+    """
+    Plot ROC curves for the 2-prong class, comparing:
+      • raw scores (softmax output for class 1)
+      • “ratio” scores (p1 / (p0 + p1))
+    for both QKeras and HLS4ML versions.
+    """
+    # colours & linestyles
+    framework_colors = {
+        "QKeras": "#1f77b4",   # blue
+        "HLS4ML": "#ff7f0e",   # orange
+    }
+    curve_styles = {
+        "raw":   {"linestyle": "-",  "label_fmt": "{} 2prong"},
+        "ratio": {"linestyle": "--", "label_fmt": "{} ratio"},
+    }
+
+    # baseline TPR axis (for interpolation)
+    tpr_baseline = np.linspace(0.025, 0.99, 200)
+
+
+    for framework, y_pred in (("QKeras", y_pred_qkeras),
+                              ("HLS4ML", y_pred_hls4ml)):
+
+        color = framework_colors[framework]
+        for kind, cfg in curve_styles.items():
+            # pick scores
+            if kind == "raw":
+                scores = y_pred[:, 1]
+            else:
+                scores = y_pred[:, 1] / (y_pred[:, 0] + y_pred[:, 1])
+
+            # compute ROC
+            fpr, tpr, _ = metrics.roc_curve(y_test[:, 1], scores)
+            auc = metrics.auc(fpr, tpr)
+
+            # interpolate for smooth plotting
+            fpr_smooth = np.interp(tpr_baseline, tpr, fpr)
+
+            # save arrays for downstream tools
+            np.array(fpr_smooth, dtype="float32").tofile(
+                os.path.join(outdir, f"fpr_{framework}_{kind}.dat")
+            )
+            np.array(tpr_baseline, dtype="float32").tofile(
+                os.path.join(outdir, f"tpr_{framework}_{kind}.dat")
+            )
+
+            # find FPR @ 80% TPR
+            idx_80 = plots.find_nearest(tpr, 0.8)
+            fpr80 = fpr[idx_80]
+
+            # plot
+            plt.plot(
+                tpr,
+                fpr,
+                color=color,
+                linestyle=cfg["linestyle"],
+                label=(cfg["label_fmt"].format(framework)
+                       + f": AUC={auc*100:.1f}%, FPR@80%TPR={fpr80:.3f}")
+            )
+
+    plt.xlabel("True Positive Rate")
+    plt.ylabel("False Positive Rate")
+    plt.ylim(1e-3, 1)
+    plt.semilogy()
+    plt.legend(prop={"size": 11})
+    plt.savefig(os.path.join(outdir, "roc_curves_comparison.pdf"))
+    plt.close()
+    print(f"ROC comparison plot saved to {outdir}.")
+   
+
 
 
 def import_model(model_dir: str, hyperparams: dict):

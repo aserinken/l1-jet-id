@@ -1,10 +1,10 @@
 ---
-outdir: 'SC8SCAN_deepsets_8bit_4const'
+outdir: 'SC8SCAN_deepsets_8bit_8const_synth'
 data_hyperparams:
 
   root: "/work/aserinke/l1-jet-id/data/test"
 
-  nconst: 4
+  nconst: 8
 
   pdg_order: [22, -11, 11, -13, 13, 130, -211, 211]
 
@@ -25,7 +25,7 @@ data_hyperparams:
   test_size: 0.2
   random_state: 42
 
-model_type: "qinvariant"
+model_type: "sinvariant"
 model_hyperparams:
   phi_layers: [64]
   rho_layers: [32, 4]
@@ -53,7 +53,7 @@ compilation_hyperparams:
   early_stopping: 20
 
 training_hyperparams:
-  batch_size: 256
+  batch_size: 512
   epochs: 1000
   shuffle: True
   verbose: 2

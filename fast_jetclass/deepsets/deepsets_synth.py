@@ -39,11 +39,21 @@ def deepsets_invariant_synth(
     activ = format_qactivation(activ, 8)
 
     deepsets_input = keras.Input(shape=input_size[1:], name="input_layer")
+    #Trick to increase the precision before normalisation.
+    #deepsets_input = qkeras.QActivation(
+    #    qkeras.quantized_bits(bits=20, integer=10, symmetric=0, keep_negative=1)
+    #)(deepsets_input)
 
+    x = qkeras.QBatchNormalization(
+        beta_quantizer='quantized_po2(5)',
+        gamma_quantizer='quantized_relu_po2(6, 2048)',
+        mean_quantizer='quantized_po2(5)',
+        variance_quantizer='quantized_relu_po2(6, quadratic_approximation=True)',
+    )(deepsets_input)
     # Phi network.
     x = qkeras.QDense(
         phi_layers[0], kernel_quantizer=quant, bias_quantizer=quant, name=f"phi{1}"
-    )(deepsets_input)
+    )(x)
     x = qkeras.QActivation(activ)(x)
     for i, layer in enumerate(phi_layers[1:]):
         x = qkeras.QDense(

@@ -2,7 +2,7 @@
 outdir: 'SC8SCAN_deepsets_8bit_28const'
 data_hyperparams:
 
-  root: "/work/aserinke/l1-jet-id/test"
+  root: "/work/aserinke/l1-jet-id/data/test"
 
   nconst: 28
 
