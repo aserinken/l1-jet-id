@@ -15,6 +15,7 @@ import hls4ml
 from tensorflow_model_optimization.python.core.sparsity.keras import pruning_wrapper
 from tensorflow_model_optimization.sparsity.keras import strip_pruning
 import qkeras
+from qkeras.quantizers import quantized_bits
 
 # np.random.seed(12)
 # tf.random.set_seed(12)
@@ -42,12 +43,31 @@ def main(args, synth_config: dict):
     # More are not really needed and it increases the runtime of this script by a lot.
     valid_data.x = valid_data.x
     valid_data.y = valid_data.y
+
+    #input_quantizer = quantized_bits(bits=12, integer=8, symmetric=0, alpha=1)
+    #valid_data.x = input_quantizer(valid_data.x.astype(np.float32)).numpy()
+
     #valid_data.shuffle_constituents(args.seed)
     model = import_model(args.model_dir, hyperparams)
 
     print(tcols.OKGREEN + "\nCONFIGURING SYNTHESIS\n" + tcols.ENDC)
     hls4ml_config = hls4ml.utils.config_from_keras_model(model, granularity="name")
-    deep_dict_update(hls4ml_config, synth_config)
+    input_precision = 'ap_fixed<24,12,AP_RND,AP_SAT>'
+
+    hls4ml_config['IOType'] = 'io_parallel'
+    hls4ml_config['LayerName']['input_layer']['Precision']['result'] = input_precision
+
+    for layer in model.layers:
+            layer_name = layer.__class__.__name__
+
+            if layer_name in ["BatchNormalization", "InputLayer"]:
+                hls4ml_config["LayerName"][layer.name]["Precision"] = input_precision
+                hls4ml_config["LayerName"][layer.name]["result"] = input_precision
+    #deep_dict_update(hls4ml_config, synth_config)
+
+    class_precision = 'ap_ufixed<24,12,AP_RND,AP_SAT>'
+    hls4ml_config["LayerName"]["output"]["Precision"]["result"] = class_precision
+    hls4ml_config["LayerName"]["output"]["Implementation"] = "latency"
 
     model_activations = get_model_activations(model)
     # Set the model activation function rounding and saturation modes.
@@ -63,16 +83,19 @@ def main(args, synth_config: dict):
 
     print(tcols.HEADER + "Configuration for hls4ml: " + tcols.ENDC)
     print(json.dumps(hls4ml_config, indent=4, sort_keys=True))
+
+
     hls_model = hls4ml.converters.convert_from_keras_model(
         model,
-        project_name="deepsets_synthesis",
+        project_name="L1TSC8NGJetModel",
         hls_config=hls4ml_config,
+        clock_period=2.8, #1/360MHz = 2.8ns
+        part='xcvu9p-flga2104-2L-e',
         output_dir=synthesis_dir,
-        part="xcvu13p-flga2577-2-e",
         io_type="io_parallel",
         backend="Vitis",
     )
-
+         
     hls_model.compile()
     if args.diagnose:
         print(tcols.OKGREEN + "\nRUNNING MODEL DIAGNOSTICS" + tcols.ENDC)
@@ -126,11 +149,15 @@ def roc_curves_comparison(outdir: str,
     # baseline TPR axis (for interpolation)
     tpr_baseline = np.linspace(0.025, 0.99, 200)
 
+    os.makedirs(outdir, exist_ok=True)
 
     for framework, y_pred in (("QKeras", y_pred_qkeras),
                               ("HLS4ML", y_pred_hls4ml)):
 
         color = framework_colors[framework]
+        # make QKeras curves semi‐transparent
+        alpha = 0.5 
+
         for kind, cfg in curve_styles.items():
             # pick scores
             if kind == "raw":
@@ -142,14 +169,14 @@ def roc_curves_comparison(outdir: str,
             fpr, tpr, _ = metrics.roc_curve(y_test[:, 1], scores)
             auc = metrics.auc(fpr, tpr)
 
-            # interpolate for smooth plotting
+            # interpolate for downstream tools
             fpr_smooth = np.interp(tpr_baseline, tpr, fpr)
 
-            # save arrays for downstream tools
-            np.array(fpr_smooth, dtype="float32").tofile(
+            # save arrays
+            fpr_smooth.astype("float32").tofile(
                 os.path.join(outdir, f"fpr_{framework}_{kind}.dat")
             )
-            np.array(tpr_baseline, dtype="float32").tofile(
+            tpr_baseline.astype("float32").tofile(
                 os.path.join(outdir, f"tpr_{framework}_{kind}.dat")
             )
 
@@ -163,6 +190,7 @@ def roc_curves_comparison(outdir: str,
                 fpr,
                 color=color,
                 linestyle=cfg["linestyle"],
+                alpha=alpha,
                 label=(cfg["label_fmt"].format(framework)
                        + f": AUC={auc*100:.1f}%, FPR@80%TPR={fpr80:.3f}")
             )
@@ -170,13 +198,13 @@ def roc_curves_comparison(outdir: str,
     plt.xlabel("True Positive Rate")
     plt.ylabel("False Positive Rate")
     plt.ylim(1e-3, 1)
+    plt.xlim(0.9, 1)
     plt.semilogy()
     plt.legend(prop={"size": 11})
+    plt.tight_layout()
     plt.savefig(os.path.join(outdir, "roc_curves_comparison.pdf"))
     plt.close()
     print(f"ROC comparison plot saved to {outdir}.")
-   
-
 
 
 def import_model(model_dir: str, hyperparams: dict):

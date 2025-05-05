@@ -7,6 +7,7 @@ import tensorflow as tf
 from tensorflow import keras
 import tensorflow.keras.layers as KL
 import qkeras
+from tensorflow.keras.layers import BatchNormalization
 
 
 def deepsets_invariant_synth(
@@ -40,16 +41,8 @@ def deepsets_invariant_synth(
 
     deepsets_input = keras.Input(shape=input_size[1:], name="input_layer")
     #Trick to increase the precision before normalisation.
-    #deepsets_input = qkeras.QActivation(
-    #    qkeras.quantized_bits(bits=20, integer=10, symmetric=0, keep_negative=1)
-    #)(deepsets_input)
 
-    x = qkeras.QBatchNormalization(
-        beta_quantizer='quantized_po2(5)',
-        gamma_quantizer='quantized_relu_po2(6, 2048)',
-        mean_quantizer='quantized_po2(5)',
-        variance_quantizer='quantized_relu_po2(6, quadratic_approximation=True)',
-    )(deepsets_input)
+    x = KL.BatchNormalization()(deepsets_input)
     # Phi network.
     x = qkeras.QDense(
         phi_layers[0], kernel_quantizer=quant, bias_quantizer=quant, name=f"phi{1}"
@@ -77,7 +70,9 @@ def deepsets_invariant_synth(
         )(x)
         x = qkeras.QActivation(activ)(x)
 
-    deepsets_output = KL.Dense(output_dim)(x)
+    deepsets_output = qkeras.QDense(
+            output_dim, kernel_quantizer=qkeras.quantized_bits(9, 2, alpha=1), bias_quantizer=qkeras.quantized_bits(9, 2, alpha=1), name=f"output"
+        )(x)
     deepsets_output = KL.Softmax()(deepsets_output)
     deepsets = keras.Model(deepsets_input, deepsets_output, name="deepsets_invariant")
 

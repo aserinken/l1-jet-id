@@ -4,8 +4,8 @@ Model:
 
 LayerName:
   input_layer:
-    Precision: "ap_fixed<12, 4, AP_RND, AP_SAT>"
+    Precision: "ap_fixed<24, 12, AP_RND, AP_SAT>"
   phi1:
     ParallelizationFactor: 1
-    ReuseFactor: 2
+    ReuseFactor: 1
     Strategy: "Latency"
