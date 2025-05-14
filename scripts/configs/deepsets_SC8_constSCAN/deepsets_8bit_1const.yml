@@ -1,10 +1,10 @@
 ---
-outdir: 'SC8SCAN_deepsets_8bit_18const'
+outdir: 'SC8SCAN_deepsets_8bit_1const'
 data_hyperparams:
 
   root: "/work/aserinke/l1-jet-id/data/test"
 
-  nconst: 18
+  nconst: 1
 
   pdg_order: [22, -11, 11, -13, 13, 130, -211, 211]
 

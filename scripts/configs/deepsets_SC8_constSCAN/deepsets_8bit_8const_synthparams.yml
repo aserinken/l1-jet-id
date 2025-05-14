@@ -1,11 +1,21 @@
 ---
+IOType: "io_parallel"
 Model:
   Strategy: "Latency"
 
 LayerName:
   input_layer:
     Precision: "ap_fixed<24, 12, AP_RND, AP_SAT>"
+    result: "ap_fixed<24, 12, AP_RND, AP_SAT>"
+  batch_normalization:
+    Precision: "ap_fixed<24, 12, AP_RND, AP_SAT>"
+    result: "ap_fixed<24, 12, AP_RND, AP_SAT>"
   phi1:
     ParallelizationFactor: 1
     ReuseFactor: 1
     Strategy: "Latency"
+  output:
+      Implementation: "latency"
+      Precision:
+        result: "ap_ufixed<24,12,AP_RND,AP_SAT>"
+
