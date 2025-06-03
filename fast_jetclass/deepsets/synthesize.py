@@ -52,22 +52,9 @@ def main(args, synth_config: dict):
 
     print(tcols.OKGREEN + "\nCONFIGURING SYNTHESIS\n" + tcols.ENDC)
     hls4ml_config = hls4ml.utils.config_from_keras_model(model, granularity="name")
-    input_precision = 'ap_fixed<24,12,AP_RND,AP_SAT>'
+ 
+    deep_dict_update(hls4ml_config, synth_config)
 
-    hls4ml_config['IOType'] = 'io_parallel'
-    hls4ml_config['LayerName']['input_layer']['Precision']['result'] = input_precision
-
-    for layer in model.layers:
-            layer_name = layer.__class__.__name__
-
-            if layer_name in ["BatchNormalization", "InputLayer"]:
-                hls4ml_config["LayerName"][layer.name]["Precision"] = input_precision
-                hls4ml_config["LayerName"][layer.name]["result"] = input_precision
-    #deep_dict_update(hls4ml_config, synth_config)
-
-    class_precision = 'ap_ufixed<24,12,AP_RND,AP_SAT>'
-    hls4ml_config["LayerName"]["output"]["Precision"]["result"] = class_precision
-    hls4ml_config["LayerName"]["output"]["Implementation"] = "latency"
 
     model_activations = get_model_activations(model)
     # Set the model activation function rounding and saturation modes.

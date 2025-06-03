@@ -40,19 +40,11 @@ def main():
         pt_thresholds=None, 
         total_event_rate=30864, 
         decision_thresholds=None)
-    analyzer.compare_ptcuts_for_one_model(
-        nconst = 8,
-        pt_cuts=(80, 100, 150),      
-        fixed_eta=2.4,
-        fixed_mass=20,
-        pt_thresholds=None,          
-        total_event_rate=30864,
-        decision_thresholds=None)
     analyzer.plot_output_dist_model(
         nconst = 8,
         pt_cut=0,
         fixed_eta=2.4,
-        fixed_mass=20,
+        fixed_mass=0,
         )
     analyzer.plot_baseline_curve(
         nconst=16,
@@ -61,14 +53,21 @@ def main():
         pt_thresholds=None,
         total_event_rate=30864
     )
-    analyzer.plot_rate_vs_pt_for_tagger_operating_points(
-        nconst=16, 
-        pt_cuts_to_scan=(0,1000,10),  # e.g. np.arange(80, 151, 10)
-        fixed_eta=2.4, 
-        fixed_mass=0, 
-        decision_thresholds=None, 
-        total_event_rate=32000, 
-        target_efficiencies=(0.90, 0.80, 0.60, 0.50, 0.20)
+    analyzer.rate_vs_ptcuts(
+        nconst=8,
+        fixed_eta=2.4,
+        fixed_mass=0,
+        total_event_rate=30864,
+        pt_thresholds=None,
+    )
+    analyzer.rate_vs_masscuts(
+        nconst=8,
+        fixed_eta=2.4,
+        total_event_rate=30864,
+        mass_thresholds=None,
+    )
+    analyzer.compare_henry_with_mine(
+        nconst=8,
     )
 
 if __name__ == "__main__":

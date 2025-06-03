@@ -42,7 +42,7 @@ def deepsets_invariant_synth(
     deepsets_input = keras.Input(shape=input_size[1:], name="input_layer")
     #Trick to increase the precision before normalisation.
 
-    x = KL.BatchNormalization()(deepsets_input)
+    x = KL.BatchNormalization()(deepsets_input)    #changed this to remove batch norm and see how the model learns pt
     # Phi network.
     x = qkeras.QDense(
         phi_layers[0], kernel_quantizer=quant, bias_quantizer=quant, name=f"phi{1}"
@@ -73,6 +73,7 @@ def deepsets_invariant_synth(
     deepsets_output = qkeras.QDense(
             output_dim, kernel_quantizer=qkeras.quantized_bits(9, 2, alpha=1), bias_quantizer=qkeras.quantized_bits(9, 2, alpha=1), name=f"output"
         )(x)
+    #deepsets_output = KL.Dense(output_dim, name="output")(x)
     deepsets_output = KL.Softmax()(deepsets_output)
     deepsets = keras.Model(deepsets_input, deepsets_output, name="deepsets_invariant")
 
