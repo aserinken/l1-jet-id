@@ -47,7 +47,7 @@ def main():
         fixed_mass=0,
         )
     analyzer.plot_baseline_curve(
-        nconst=16,
+        nconst=8,
         fixed_eta=2.4,
         fixed_mass=0,
         pt_thresholds=None,
@@ -66,9 +66,9 @@ def main():
         total_event_rate=30864,
         mass_thresholds=None,
     )
-    analyzer.compare_henry_with_mine(
-        nconst=8,
-    )
+    #analyzer.compare_henry_with_mine(
+    #    nconst=8,
+    #)
 
 if __name__ == "__main__":
     main()

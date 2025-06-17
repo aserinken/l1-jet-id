@@ -1,0 +1,72 @@
+---
+outdir: 'SC8_1node_8const_synth'
+data_hyperparams:
+
+  root: "/work/aserinke/l1-jet-id/data/test/1node"
+
+  nconst: 8
+
+  pdg_order: [22, -11, 11, -13, 13, 130, -211, 211]
+
+  norm: "standard"
+
+  kfolds: 5
+
+  seed: 42
+
+  datasets:
+    bkg:
+      - "/work/aserinke/SC8_Data/morebackground/1.root"
+      - "/work/aserinke/SC8_Data/morebackground/2.root"
+      - "/work/aserinke/SC8_Data/morebackground/3.root"
+      - "/work/aserinke/SC8_Data/morebackground/4.root"
+      - "/work/aserinke/SC8_Data/morebackground/5.root"
+      - "/work/aserinke/SC8_Data/morebackground/6.root"
+      - "/work/aserinke/SC8_Data/morebackground/7.root"
+      - "/work/aserinke/SC8_Data/morebackground/8.root"
+      - "/work/aserinke/SC8_Data/morebackground/9.root"
+      - "/work/aserinke/SC8_Data/morebackground/10.root"
+      - "/work/aserinke/SC8_Data/morebackground/11.root"
+      - "/work/aserinke/SC8_Data/morebackground/12.root"
+      - "/work/aserinke/SC8_Data/morebackground/13.root"
+      - "/work/aserinke/SC8_Data/morebackground/14.root"
+      - "/work/aserinke/SC8_Data/morebackground/15.root"
+      
+    sig:
+      - "/work/aserinke/SC8_Data/morebackground/lightHbb_M20to80_Pt50to200.root"
+
+  test_size: 0.2
+  random_state: 42
+
+model_type: "sinvariant"
+model_hyperparams:
+  phi_layers: [64]
+  rho_layers: [32, 4]
+  activ: "relu"
+  aggreg: "mean"
+  output_dim: 1
+  nbits: 8
+
+compilation_hyperparams:
+  optimizer: "adam"
+  optimizer_hps:
+    learning_rate: 0.0029
+  optimizer_callbacks:
+    early_stopping:
+      monitor: "val_accuracy"
+      patience: 20
+    lr_decay:
+      monitor: "val_accuracy"
+      factor: 0.8
+      patience: 10
+      min_lr: 0.0001
+
+  loss: "binary_crossentropy"
+  metrics: ["accuracy"]
+  early_stopping: 20
+
+training_hyperparams:
+  batch_size: 512
+  epochs: 1000
+  shuffle: True
+  verbose: 2
