@@ -18,7 +18,7 @@ from fast_jetclass.util import util
 from fast_jetclass.util import plots
 from fast_jetclass.util import flops
 from fast_jetclass.util.terminal_colors import tcols
-from fast_jetclass.data import FullJetData
+from fast_jetclass.data import  FullJetData, SC8Data
 
 # Set keras float precision. Default is float32.
 # tf.keras.backend.set_floatx("float64")
@@ -122,21 +122,21 @@ def save_model_weights(model_dir: str, model: keras.Model):
 def run_inference(model: keras.Model, data: FullJetData, plots_dir: str):
     """Computes predictions of a model and saves them to numpy files."""
     y_pred = model.predict(data.x)
-    if isinstance(model.layers[-1], keras.layers.Dense):
-        # Pass the outputs through a softmax layer if the last layer is just a dense.
-        y_pred = tf.nn.softmax(y_pred).numpy()
-
+    # Flatten predictions to shape (n_samples,)
+    y_pred = y_pred.flatten()
+    # Save predictions to file
     y_pred.astype("float32").tofile(os.path.join(plots_dir, "y_pred.dat"))
-
     return y_pred
 
 
 def compute_crossent(y_pred: np.ndarray, y_true: np.ndarray):
-    """Computes corss-entropy loss given the predictions of the model and the truth."""
-    categorical_crossent = keras.losses.CategoricalCrossentropy()
-    ce_loss = categorical_crossent(y_true, y_pred).numpy()
+    """Compute binary cross-entropy loss given the model predictions and true labels."""
+    # Create a BinaryCrossentropy loss instance
+    binary_crossent = keras.losses.BinaryCrossentropy()
+    # Make sure y_true is the correct shape (n_samples,) or (n_samples,1)
+    # Here, y_pred has shape (n_samples,) so we add a dimension to match y_true if needed.
+    ce_loss = binary_crossent(y_true, y_pred[..., None]).numpy()
     print(tcols.OKCYAN + f"Cross-entropy loss: " + tcols.ENDC, ce_loss)
-
     return ce_loss
 
 
@@ -158,9 +158,11 @@ def count_flops(model_dir: str, model: keras.Model):
 
 
 def calculate_accuracy(y_pred: np.ndarray, y_true: np.ndarray):
-    """Computes accuracy for a model's predictions."""
-    acc = keras.metrics.CategoricalAccuracy()
-    acc.update_state(y_true, y_pred)
-    print(tcols.OKCYAN + f"Accuracy: " + tcols.ENDC, acc.result().numpy())
-
-    return acc.result().numpy()
+    """Compute binary accuracy for model predictions."""
+    # Threshold predictions at 0.5 to obtain class predictions (0 or 1).
+    y_pred_class = (y_pred > 0.5).astype(np.int32)
+    # Flatten y_true in case it's (n_samples, 1)
+    y_true_class = y_true.flatten().astype(np.int32)
+    acc = np.mean(y_pred_class == y_true_class)
+    print(tcols.OKCYAN + f"Accuracy: " + tcols.ENDC, acc)
+    return acc

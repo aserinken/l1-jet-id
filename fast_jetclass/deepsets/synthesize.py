@@ -12,6 +12,7 @@ from sklearn import metrics
 import numpy as np
 import tensorflow as tf
 import hls4ml
+from hls4ml.model.profiling import get_ymodel_keras, numerical
 from tensorflow_model_optimization.python.core.sparsity.keras import pruning_wrapper
 from tensorflow_model_optimization.sparsity.keras import strip_pruning
 import qkeras
@@ -28,6 +29,7 @@ from fast_jetclass.util import plots
 from fast_jetclass.util.terminal_colors import tcols
 from fast_jetclass.data.hls4ml150 import HLS4MLData150
 from fast_jetclass.data.FullJetData import FullJetData
+from fast_jetclass.data.SC8Data import SC8Data
 
 
 def main(args, synth_config: dict):
@@ -65,8 +67,13 @@ def main(args, synth_config: dict):
     )
 
     if args.diagnose:
+        print("\nSetting Trace=True for all layers...")
         for layer in hls4ml_config["LayerName"].keys():
             hls4ml_config["LayerName"][layer]["Trace"] = True
+
+        # 🔍 Confirm it's applied
+        for layer, conf in hls4ml_config["LayerName"].items():
+            print(f"Layer: {layer} -> Trace: {conf.get('Trace', False)}")
 
     print(tcols.HEADER + "Configuration for hls4ml: " + tcols.ENDC)
     print(json.dumps(hls4ml_config, indent=4, sort_keys=True))
@@ -112,6 +119,19 @@ def main(args, synth_config: dict):
     print(f"Accuracy ratio: {acc_synth/acc:.3f}")
 
 
+
+    #I want to load data and just save the output of the hls4ml model to a file.
+    henry_path = "/work/aserinke/SC8_Data/Henry_Data/inputs_physical.npy"
+    henry_data = np.load(henry_path)
+    henry_data = henry_data.astype(np.float32)
+    print("Loaded Henry data keys:", henry_data.shape)
+    henry_scores = hls_model.predict(henry_data)
+    henry_scores = henry_scores.astype(np.float32)
+    henry_scores_path = os.path.join(synthesis_dir, f"hls_scores_n8.npy")
+    np.save(henry_scores_path, henry_scores)
+    print("Saved Henry scores to:", henry_scores_path)
+    print("Standalone scores shape:", henry_scores.shape)
+
 #Function which makes the ROC curves for the model and the synthesized model.
 def roc_curves_comparison(outdir: str,
                           y_pred_qkeras: np.ndarray,
@@ -148,12 +168,11 @@ def roc_curves_comparison(outdir: str,
         for kind, cfg in curve_styles.items():
             # pick scores
             if kind == "raw":
-                scores = y_pred[:, 1]
-            else:
-                scores = y_pred[:, 1] / (y_pred[:, 0] + y_pred[:, 1])
+                # For a binary classifier, use the predicted probability directly.
+                scores = y_pred  
 
             # compute ROC
-            fpr, tpr, _ = metrics.roc_curve(y_test[:, 1], scores)
+            fpr, tpr, _ = metrics.roc_curve(y_test, scores)
             auc = metrics.auc(fpr, tpr)
 
             # interpolate for downstream tools
@@ -225,13 +244,10 @@ def calculate_accuracy(y_pred: np.ndarray, y_true: np.ndarray):
     return acc.result().numpy()
 
 
-def run_inference(model: keras.Model, data: HLS4MLData150 | FullJetData):
-    """Computes predictions of a model and saves them to numpy files."""
-    y_pred = model.predict(data.x)
-    if isinstance(model.layers[-1], keras.layers.Dense):
-        # Pass the outputs through a softmax layer if the last layer is just a dense.
-        y_pred = tf.nn.softmax(y_pred).numpy()
-
+def run_inference(model: keras.Model, data: FullJetData | SC8Data):
+    """Computes predictions of a binary model and saves them to numpy files."""
+    # For a binary model with one output, no softmax is needed.
+    y_pred = model.predict(data.x).flatten()
     return y_pred
 
 
@@ -242,9 +258,9 @@ def profile_model(
 
     The plots in this function show the distribution of weights in the network.
     """
-    fig1, fig2, fig3, fig4 = hls4ml.model.profiling.numerical(
+    fig1, fig2, fig3, fig4 = numerical(
         model=model, hls_model=hls_model, X=data[:5000]
-    )
+        )
 
     fig1.savefig(os.path.join(outdir, "fig1"))
     fig2.savefig(os.path.join(outdir, "fig2"))
@@ -272,7 +288,7 @@ def run_trace(model: keras.Model, hls_model: hls4ml.model, data: np.ndarray, out
 
     # Take just the first 100 events of the data set.
     hls4ml_pred, hls4ml_trace = hls_model.trace(data[:100])
-    keras_trace = hls4ml.model.profiling.get_ymodel_keras(model, data[:100])
+    keras_trace = get_ymodel_keras(model, data[:100])
 
     # Write the weights of the hls4ml and qkeras networks for the 3 specified samples.
     trace_file_path = os.path.join(outdir, "trace_output.log")

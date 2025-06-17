@@ -17,6 +17,7 @@ from fast_jetclass.util import util
 from fast_jetclass.util import plots
 from fast_jetclass.util.terminal_colors import tcols
 from fast_jetclass.deepsets import util as dsutil
+from sklearn.utils.class_weight import compute_class_weight
 
 # Set keras float precision. Default is float32.
 # tf.keras.backend.set_floatx("float64")
@@ -35,7 +36,9 @@ def main(config: dict):
     initial_weights = model.get_weights()
 
     util.print_training_attributes(model, config["training_hyperparams"])
-    for kfold, (train_idx, valid_idx) in enumerate(train_data.kfolds):
+
+    print("train_data.kfolds:", train_data.kfolds)
+    for kfold, (train_idx, valid_idx) in enumerate(train_data.kfold_indices):
         print(tcols.HEADER + f"\nTRAINING kfolding {kfold + 1} \U0001F4AA" + tcols.ENDC)
         train_kfolds = (train_data.x[train_idx], train_data.y[train_idx])
         valid_kfolds = (train_data.x[valid_idx], train_data.y[valid_idx])
@@ -76,11 +79,19 @@ def train_and_save(
     outdir: str,
 ):
     """Run keras training and save model at the end."""
+    train_labels = train_data[1].flatten()
+
+    classes = np.unique(train_labels)
+    cw = compute_class_weight("balanced", classes=classes, y=train_labels)
+    class_weight = dict(zip(classes, cw))
+    print("Computed class weights:", class_weight)
+
     history = model.fit(
         x=train_data[0],
         y=train_data[1],
         callbacks=model_callbacks,
         validation_data=valid_data,
+        class_weight=class_weight,
         **hps,
     )
     print(tcols.OKGREEN + "\n\n\nSAVING MODEL TO: " + tcols.ENDC, outdir)

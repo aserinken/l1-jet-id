@@ -74,7 +74,7 @@ def deepsets_invariant_synth(
             output_dim, kernel_quantizer=qkeras.quantized_bits(9, 2, alpha=1), bias_quantizer=qkeras.quantized_bits(9, 2, alpha=1), name=f"output"
         )(x)
     #deepsets_output = KL.Dense(output_dim, name="output")(x)
-    deepsets_output = KL.Softmax()(deepsets_output)
+    deepsets_output = KL.Activation("sigmoid", name="output_sigmoid")(deepsets_output)
     deepsets = keras.Model(deepsets_input, deepsets_output, name="deepsets_invariant")
 
     return deepsets

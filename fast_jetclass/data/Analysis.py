@@ -163,7 +163,7 @@ class ModelComparisonAnalysis:
 
         all_models = {}
         for n in nconst_list:
-            model_dir = model_root / f"SC8SCAN_deepsets_8bit_{n}const_synth" / "kfolding1"
+            model_dir = model_root / f"SC8_synth_morebackground_deepsets_8bit_{n}const" / "kfolding1"
             if not model_dir.is_dir():
                 print(f"Warning: Model directory not found for nconst={n}: {model_dir}")
                 all_models[n] = None
@@ -769,7 +769,7 @@ class ModelComparisonAnalysis:
         self,
         nconst=16,
         fixed_eta=2.4,
-        fixed_mass=20,
+        fixed_mass=0,
         total_event_rate=30845,          
         pt_thresholds=None,
         decision_thresholds=None
@@ -791,7 +791,7 @@ class ModelComparisonAnalysis:
             print(f"No model loaded for nconst={nconst}.")
             return
 
-        # one pass over the data ------------------------------------------------
+        # --------------------------------------------------------------------
         data = self.load_data(nconst)
         if data["3d_labels"] is None or data["2d_data"] is None:
             print("Missing data – aborting.")
@@ -801,11 +801,11 @@ class ModelComparisonAnalysis:
         n_events = len(twoD)
         y_true = np.argmax(data["3d_labels"], axis=1)
         bkg_mask_all = (y_true == 0)    
-        sig_mask_all = (y_true == 1)                # True / False per event
+        sig_mask_all = (y_true == 1)                
         n_bkg_events   = bkg_mask_all.sum() 
         n_sig_events   = sig_mask_all.sum()  
 
-        # NN scores (compute once!)
+        # compute scores
         scores = model.predict(data["3d_data"])[:, 1]
 
         # -------------------------------------------------------------------- #
@@ -833,7 +833,7 @@ class ModelComparisonAnalysis:
         colours = ["tab:green", "tab:orange", "tab:olive", "tab:brown", "tab:purple"]
         tagger_curves = {}
         for dt, col in zip(decision_thresholds, colours):
-            nn_pass = scores > dt                         # compute once per dt
+            nn_pass = scores > dt                         
             tagger_rate = []
             tagger_eff  = []
             for thr in pt_thresholds:
@@ -875,7 +875,7 @@ class ModelComparisonAnalysis:
 
 
         # ------------------------------------------------------------------ #
-        # summary tables (nearest grid point, no interpolation)              #
+        # summary tables                                                     #
         # ------------------------------------------------------------------ #
         from numpy import array, interp
 
@@ -907,7 +907,7 @@ class ModelComparisonAnalysis:
                         f"(pT ≈ {pt_t:.1f} GeV)")
 
         print("\n===  Rate reduction & efficiency at fixed pT cuts (nearest) ===")
-        def nearest_idx(arr, val):                 # unchanged helper
+        def nearest_idx(arr, val):                 
             return int(np.argmin(np.abs(array(arr) - val)))
 
         for pt_ref in ref_ptcuts:

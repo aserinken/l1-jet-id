@@ -93,6 +93,7 @@ def choose_loss(choice: str, **kwargs) -> keras.losses.Loss:
             **kwargs
         ),
         "softmax_with_crossentropy": lambda: tf.nn.softmax_cross_entropy_with_logits,
+        "binary_crossentropy": lambda: keras.losses.BinaryCrossentropy(**kwargs),
     }
 
     loss = switcher.get(choice, lambda: None)()

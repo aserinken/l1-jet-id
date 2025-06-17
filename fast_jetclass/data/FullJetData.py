@@ -11,11 +11,12 @@ import matplotlib.pyplot as plt
 
 
 class FullJetData(object):
-    """Data Class for importing and processing full jet data.
+    """Data Class for importing and processing top pt jets.
 
     Raw data is available in /eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/
     But the necessary raw files were uploaded to a local folder.
     If one has access to the EOS folder, one can set the path to the EOS folders
+    As the data format is different to the SC4 data, one has to load different branches and do a matching
 
     Args:
         root: The root directory of the data. It should contain a 'number of constituents' folder with
@@ -59,8 +60,8 @@ class FullJetData(object):
         self.kfolds = kfolds
         self.seed = seed
         self.datasets = datasets if datasets else {}
-        self.random_state = random_state
         self.test_size = test_size
+        self.random_state = random_state
         self.padding_value = padding_value
         self.analysis = analysis
 
@@ -243,9 +244,9 @@ class FullJetData(object):
             self._process_single_file(key, file_index, root_path)
 
     def _process_single_file(self, key, file_index, root_path) -> None:
-        """Convert one ROOT file (both sc8 and puppi) into Parquet.
+        """
+        Convert one ROOT file (both sc8 and puppi (puppi is used for matching)) into Parquet and saved it.
 
-        
         Args:
             key: The key for the dataset ("bkg" or "sig").
             file_index: Index of the file in the list.
@@ -255,15 +256,12 @@ class FullJetData(object):
         with uproot.open(root_path) as f:
             tree = f["Events"]
 
-            # Get the SC8 jets
             sc8_raw = self._get_branch(tree, "sc8PuppiEmuJets_")
             sc8 = self._transform_jets(sc8_raw)
             sc8 = ak.with_field(sc8, np.sqrt(sc8.mass), where="mass")
 
-            # Get the Puppi jets for later matching
             puppi = self._get_branch(tree, "puppiCands_")
 
-        # Save each as Parquet
         sc8_name = f"{key}_sc8Emu_{self.nconst}_{file_index}.pq"
         puppi_name = f"{key}_puppi_{self.nconst}_{file_index}.pq"
         self._save_parquet(sc8, sc8_name)
@@ -272,6 +270,10 @@ class FullJetData(object):
     def _save_parquet(self, ak_arr, out_name) -> None:
         """
         Saves an Awkward array to Parquet in self.data_dir.
+
+        Args:
+            ak_arr: The Awkward array to save.
+            out_name: The name of the output file, e.g. "bkg_sc8Emu_32_0.pq".
         """
         path = os.path.join(self.raw_path, out_name)
         ak.to_parquet(ak_arr, path)
@@ -283,24 +285,30 @@ class FullJetData(object):
         """
         Identify all branches that match `branch_str` (excluding e.g. n{branch_str})
         and build an Awkward array with them.
+
+        Args:
+            root_data: The data from the ROOT file, either as an Awkward array or Uproot tree.
+            branch_str: Name of the branch to look for, e.g. "sc8PuppiEmuJets_".
         """
         branches = [
             b for b in root_data.keys() if branch_str in b and not f"n{branch_str}" in b
         ]
         data_arr = root_data.arrays(branches)
-        # Example: "sc8PuppiEmuJets_pt" => rename it to "pt"
         renamed = {field: field.split("_", maxsplit=1)[-1] for field in branches}
-        # Combine them into a record array; optionally name it "Momentum4D"
         arr = ak.with_name(
             ak.zip({renamed[k]: data_arr[k] for k in data_arr.fields}), "Momentum4D"
         )
         return arr
 
     def _transform_jets(self, jets_ak) -> ak.Array:
-        # Keep only first jet
-        jets = jets_ak[:, 0]
+        """
+        Transform the jets Awkward array to include only the first jet(being the top pt jet of the event) and its constituents.
+        It gathers the daughter information and computes relative pt, log(pt), deta, dphi, and isfilled.
 
-        # Gather daughter info
+        Args:
+            jets_ak: The Awkward array of jets, with fields like "dau0_pt", "dau0_eta", etc.
+        """
+        jets = jets_ak[:, 0]
         arr_pt, arr_eta, arr_phi, arr_pdg, arr_vz = [], [], [], [], []
         arr_pt_rel, arr_log_pt = [], []
         arr_deta, arr_dphi = [], []
@@ -311,10 +319,8 @@ class FullJetData(object):
             arr_phi.append(jets[f"dau{i}_phi"])
             arr_pdg.append(jets[f"dau{i}_pdgId"])
             arr_vz.append(jets[f"dau{i}_vz"])
-
             arr_pt_rel.append(jets[f"dau{i}_pt"] / jets.pt)
             arr_log_pt.append(np.log(jets[f"dau{i}_pt"]))
-
             arr_deta.append(jets[f"dau{i}_eta"] - jets.eta)
 
             raw_dphi = jets[f"dau{i}_phi"] - jets.phi
@@ -365,6 +371,9 @@ class FullJetData(object):
         """
         Loads all Parquet files in self.root that start with 'prefix' and
         concatenates them into a single Awkward array.
+
+        Args:
+            prefix: The prefix to filter Parquet files, e.g. "bkg_sc8Emu_32_".
         """
         from os import listdir
 
@@ -388,21 +397,16 @@ class FullJetData(object):
 
     def _load_parquet(self) -> None:
         """
-        Step 2: Load sc8/puppi from Parquet into Awkward arrays.
+        Loads the sc8 and Puppi data from Parquet files in the raw_path directory.
         """
         print("[_load_parquet] Loading sc8/puppi from Parquet...")
 
-        # For background sc8
         self.sc8_bkg_ak = self._load_parquet_files(f"bkg_sc8Emu_{self.nconst}_")
-        # For puppi background
         self.puppi_bkg_ak = self._load_parquet_files(f"bkg_puppi_{self.nconst}_")
 
-        # For signal sc8
         self.sc8_sig_ak = self._load_parquet_files(f"sig_sc8Emu_{self.nconst}_")
-        # For puppi signal
         self.puppi_sig_ak = self._load_parquet_files(f"sig_puppi_{self.nconst}_")
 
-        # Optional: print quick summary
         print(
             "  sc8_bkg:",
             type(self.sc8_bkg_ak),
@@ -433,7 +437,7 @@ class FullJetData(object):
     # -------------------------------------------------------------
     def _match_puppi(self) -> None:
         """
-        Step 3: Match Puppi to sc8 by pt, eta, phi.
+        Matches the sc8 jets to Puppi weights
         """
         print("[_match_puppi] Matching sc8 to Puppi...")
         self.sc8_bkg_ak = self._match_puppi_weights(self.sc8_bkg_ak, self.puppi_bkg_ak)
@@ -442,13 +446,15 @@ class FullJetData(object):
     def _match_puppi_weights(self, sc8_ak, puppi_ak) -> ak.Array:
         """
         Loop over events, call _match_single_event, return new Awkward array.
+
+        Args:
+            sc8_ak: Awkward array of sc8 jets.
+            puppi_ak: Awkward array of Puppi jets.
         """
         if sc8_ak is None or puppi_ak is None:
             raise RuntimeError("sc8_ak or puppi_ak is None!")
         if len(sc8_ak) != len(puppi_ak):
             raise ValueError("Need the same # of events in sc8 and puppi arrays.")
-
-        from tqdm import tqdm
 
         updated = []
         for ev_sc8, ev_puppi in tqdm(
@@ -459,9 +465,14 @@ class FullJetData(object):
 
     def _match_single_event(self, ev_sc8, ev_puppi) -> dict:
         """
-        Per-event matching via dict lookup.
+        Per-event matching via dict lookup. Pt, eta, phi of each sc8 constituent 
+        is matched to the Puppi mass and weight. Then the constituents dict is updated
+        with the matched mass and weight.
+
+        Args:
+            ev_sc8: Single event from sc8 Awkward array.
+            ev_puppi: Single event from Puppi Awkward array.
         """
-        # build a lookup: (pt,eta,phi) -> (mass, puppiWeight)
         lookup = {
             (float(c["pt"]), float(c["eta"]), float(c["phi"])): (
                 float(c["mass"]),
@@ -487,7 +498,6 @@ class FullJetData(object):
                 matched_mass.append(m)
                 matched_weight.append(w)
 
-        # re‑assemble the constituents dict, including new fields
         constits_dict = {
             "pt": const["pt"],
             "eta": const["eta"],
@@ -503,7 +513,6 @@ class FullJetData(object):
             "puppiWeight": {str(i): matched_weight[i] for i in range(self.nconst)},
         }
 
-        # top‑level event fields
         base = {
             "pt": ev_sc8["pt"],
             "eta": ev_sc8["eta"],
@@ -534,6 +543,9 @@ class FullJetData(object):
         and each PDG in self.pdg_order, create a record-of-32
         (like 'pdg_22': { '0': 1/0, '1': 1/0, ... }).
         Attach it to sc8_ak['constituents'] as new fields.
+
+        Args:
+            sc8_ak: Awkward array of sc8 jets, with fields like "constituents".
         """
         import awkward as ak
         from tqdm import tqdm
@@ -548,20 +560,21 @@ class FullJetData(object):
             updated_events.append(self._encode_pdg_single_event(ev))
 
         encoded_ak = ak.Array(updated_events)
-
-        # Optional debug prints
-        if len(encoded_ak) > 0:
-            self._debug_print_pdg_fields(encoded_ak)
-
         return encoded_ak
 
     def _encode_pdg_single_event(self, ev) -> dict:
         """
-        Handle the one-hot PDG for a single event.
+        Handle the one-hot PDG for a single event. 
+        It creates a new 'constituents' field with one-hot encoded PDG codes
+        and copies existing fields from the original event. One can also 
+        decide here which features to keep or drop. As in the SC4 algorithm,
+        we keep pt, vz, pt_rel, log_pt, deta, dphi, isfilled, and mass/puppiWeight
+        from the original constituents. 
+
+        Args:
+            ev: Single event from the sc8 Awkward array, with fields like "constituents".
         """
         old_constits = ev["constituents"]
-
-        # Copy existing fields
         new_constits = {
             "pt": old_constits["pt"],
             # "eta": old_constits["eta"],
@@ -573,12 +586,11 @@ class FullJetData(object):
             "dphi": old_constits["dphi"],
             "isfilled": old_constits["isfilled"],
         }
-        # Copy mass, puppiWeight if present
+
         for extra_feat in ["mass", "puppiWeight"]:
             if extra_feat in old_constits.fields:
                 new_constits[extra_feat] = old_constits[extra_feat]
 
-        # Build the new fields for each PDG code
         for pdg_val in self.pdg_order:
             field_name = f"pdg_{pdg_val}"
             subdict = {}
@@ -587,7 +599,6 @@ class FullJetData(object):
                 subdict[str(j)] = 1.0 if pdg_j == pdg_val else 0.0
             new_constits[field_name] = subdict
 
-        # Build updated top-level event
         updated_event = {
             "pt": ev["pt"],
             "eta": ev["eta"],
@@ -600,32 +611,16 @@ class FullJetData(object):
 
         updated_event["constituents"] = new_constits
         return updated_event
-
-    def _debug_print_pdg_fields(self, encoded_ak) -> None:
-        """
-        Prints the fields in the first event's constituents and a few
-        example values for PDG one-hot fields.
-        """
-        print("\n[DEBUG] After PDG one-hot encoding, the first event's constituent fields:")
-        first_ev_constits = encoded_ak[0]["constituents"]
-        print("Fields:", first_ev_constits.fields)
-
-        one_hot_fields = [f for f in first_ev_constits.fields if f.startswith("pdg_")]
-        max_index = min(2, self.nconst)  # only loop over available daughters
-        for f_ in one_hot_fields[:3]:  # just example for the first few PDG fields
-            vals = [first_ev_constits[f_][str(j)] for j in range(max_index)]
-            print(f"  {f_}, daughters 0..{max_index-1} => {vals}")
-
+    
     # -------------------------------------------------------------
     # Step 5: Pad => 3D arrays
     # -------------------------------------------------------------
     def _pad_to_3d(self) -> None:
         """
-        Step 5: Convert sc8 bkg/sig Awkward arrays to 3D NumPy arrays and save them.
+        Convert sc8 bkg/sig Awkward arrays to 3D NumPy arrays and save them.
         """
         print("[_pad_to_3d] Converting data to 3D arrays...")
 
-        # Define the features you want to extract in the 3D array
         feature_list = [
             "pt",
             # "eta", "phi",
@@ -639,10 +634,8 @@ class FullJetData(object):
             "puppiWeight",
         ] + [f"pdg_{p}" for p in self.pdg_order]
 
-        # Define the features you want to extract in the 2D array
         top_level_list = ["pt", "eta", "phi", "mass"]
 
-        # Convert background
         if self.sc8_bkg_ak is not None:
             self.bkg_3d = self._to_3d_numpy(self.sc8_bkg_ak, feature_list)
             np.save(
@@ -662,7 +655,6 @@ class FullJetData(object):
         else:
             self.bkg_3d = None
 
-        # Convert signal
         if self.sc8_sig_ak is not None:
             self.sig_3d = self._to_3d_numpy(self.sc8_sig_ak, feature_list)
             np.save(
@@ -685,7 +677,12 @@ class FullJetData(object):
     def _to_3d_numpy(self, sc8_ak, feature_list) -> np.ndarray:
         """
         Convert a 'record-of-nconst' sc8 Awkward array into a 3D NumPy array.
-        Shape = (nEvents, n_constits, len(feature_list)).
+        Shape = (nEvents, n_constits, len(feature_list)). 
+        Each feature is extracted from the 'constituents' field of the sc8_ak array.
+
+        Args:
+            sc8_ak: Awkward array of sc8 jets, with fields like "constituents".
+            feature_list: List of features to extract from the constituents.
         """
         import numpy as np
 
@@ -714,6 +711,12 @@ class FullJetData(object):
     def _to_2d_numpy_toplevel(self, sc8_ak, top_level_list) -> np.ndarray:
         """
         Extracts the top-level features from the sc8_ak array and converts them to a 2D NumPy array.
+        Shape = (nEvents, len(top_level_list)).
+        Each feature is extracted from the top-level fields of the sc8_ak array.
+
+        Args:
+            sc8_ak: Awkward array of sc8 jets, with fields like "pt", "eta", "phi", "mass".
+            top_level_list: List of top-level features to extract.
         """
         import numpy as np
 
@@ -734,7 +737,11 @@ class FullJetData(object):
 
     def load_3d_data(self) -> None:
         """
-        Loads the 3D data from the preprocessed folder.
+        Loads the 3D data from the preprocessed folder. 
+        Prints the shapes of the loaded arrays.
+        If the top-level 2D arrays are also available, they are loaded as well.
+        If the 3D arrays are not found, it will not raise an error but will skip the loading.
+        Note: This method assumes that the preprocessed data has been saved in the expected format.
         """
         bkg_path = os.path.join(
             self.preprocessed_path, f"bkg_3d_{self.preproc_output_name}.npy"
@@ -758,7 +765,6 @@ class FullJetData(object):
             self.sig_3d = np.load(sig_path)
             print(f"Loaded sig_3d from {sig_path} with shape {self.sig_3d.shape}")
 
-        # Also load the top-level 2D arrays
         if os.path.isfile(bkg_top_path):
             self.bkg_top = np.load(bkg_top_path)
             print(f"Loaded bkg_top from {bkg_top_path} with shape {self.bkg_top.shape}")
@@ -767,28 +773,18 @@ class FullJetData(object):
             self.sig_top = np.load(sig_top_path)
             print(f"Loaded sig_top from {sig_top_path} with shape {self.sig_top.shape}")
 
-        if hasattr(self, "bkg_top"):
-            eta_vals = self.bkg_top[:, 1]  # assuming column 1 is eta
-            phi_vals = self.bkg_top[:, 2]  # assuming column 2 is phi
-            print(f"[DEBUG] Background top-level eta: min={np.min(eta_vals):.3f}, max={np.max(eta_vals):.3f}")
-            print(f"[DEBUG] Background top-level phi: min={np.min(phi_vals):.3f}, max={np.max(phi_vals):.3f}")
-
-        if hasattr(self, "sig_top"):
-            eta_vals = self.sig_top[:, 1]
-            phi_vals = self.sig_top[:, 2]
-            print(f"[DEBUG] Signal top-level eta: min={np.min(eta_vals):.3f}, max={np.max(eta_vals):.3f}")
-            print(f"[DEBUG] Signal top-level phi: min={np.min(phi_vals):.3f}, max={np.max(phi_vals):.3f}")
-
     # -------------------------------------------------------------
     # Step 6: Combine bkg & sig => X, y
     # -------------------------------------------------------------
     def _combine_sig_bkg(self) -> None:
         """
-        Step 6: Combine bkg & sig arrays => self.x, self.y.
+        Combine bkg & sig arrays => self.x, self.y.
+        This method combines the 3D arrays of background and signal jets into a single array X,
+        and creates corresponding labels y. It also combines the top-level 2D arrays if available.
+        The y lanbels are one-hot encoded with two classes: background (0) and signal (1).
         """
         print("[_combine_sig_bkg] Combining bkg & sig => X, y... (and top-level data)")
 
-        # Combine 3D arrays.
         if (self.bkg_3d is None) or (self.sig_3d is None):
             print("  Missing bkg or sig 3D arrays. Skipping.")
             self.x = None
@@ -801,22 +797,18 @@ class FullJetData(object):
                     np.ones(len(self.sig_3d), dtype=np.int32),
                 ]
             )
-            n_classes = 2
-            y = np.eye(n_classes, dtype=np.float32)[labels]
+            y = labels.reshape(-1, 1).astype(np.float32)
             self.x = X
             self.y = y
             print("Combined X shape:", X.shape, " y shape:", y.shape)
 
-        # Combine 2D arrays.
         if (getattr(self, "bkg_top", None) is not None) and (
             getattr(self, "sig_top", None) is not None
         ):
             X_top = np.concatenate([self.bkg_top, self.sig_top], axis=0)
-            # Reuse the same labels as above if 3D arrays were combined.
             if getattr(self, "y", None) is not None:
                 y_top = self.y
             else:
-                # Otherwise, build new labels for top-level if needed.
                 labels_top = np.concatenate(
                     [
                         np.zeros(len(self.bkg_top), dtype=np.int32),
@@ -841,7 +833,12 @@ class FullJetData(object):
     # -------------------------------------------------------------
     def _normalize_data(self) -> None:
         """
-        Step 7: Normalize data and optionally split into train/test with plots.
+        Normalize data and split into training and test sets.
+        This method normalizes the 3D data (jets) and the top-level 2D data (jets) using a RobustScaler.
+        It also splits the data into training and test sets, saving them in the processed folder.
+        The normalization is done for both 3D and 2D data separately.
+        Normalization is currently not done as one added a batch normalization layer in the model. 
+        This is the method used in the SC4 algorithm.
         """
         print("[_normalize_data] Normalizing data...")
 
@@ -966,28 +963,29 @@ class FullJetData(object):
         Plots a histogram for each feature in features from the 3D array,
         using only the values for daughter 0 across all events.
         X_3d shape: (numEvents, numConstituents, numFeatures).
-        """
-        num_events, num_constits, num_feats = X_3d.shape
 
+        Args:
+            X_3d: 3D NumPy array of shape (numEvents, numConstituents, numFeatures).
+            features: List of feature names to plot.
+            stage: "before" or "after" normalization, used for labeling the plots.
+        """
         for i, feat_name in enumerate(features):
             # Only take the 0th daughter across all events
-            feat_values = X_3d[:, 0, i]
+            feat_values = X_3d[:, :, i].flatten()
 
             plt.figure()
             plt.hist(
-                feat_values, bins="auto", histtype="step", label=f"{feat_name} ({stage})"
+                feat_values, bins=50, histtype="step", label=f"{feat_name} ({stage})"
             )
             plt.xlabel(feat_name)
-            # do a log scale for the y axis
             plt.yscale("log")
             plt.grid()
             plt.ylabel("Count")
             plt.title(
-                f"Distribution of {feat_name} ({stage} normalization) for daughter 1"
+                f"Distribution of {feat_name} ({stage} normalization) for all constituents"
             )
             plt.legend()
             plt.show()
-            # save the plot in the preprocessed folder if stage is before if it is after then save in processed
             if stage == "before":
                 plt.savefig(
                     os.path.join(self.preprocessed_path, f"{feat_name}_{stage}.png")
@@ -1001,7 +999,12 @@ class FullJetData(object):
 
     def load_normalized_data(self) -> None:
         """
-        Optional method to reload your saved normalized data from disk.
+        Loads the normalized data from the processed folder.
+        It checks for the existence of the train and test files for both 3D and top-level data.
+        If the files exist, it loads them into self.x and self.y for 3D data,
+        and self.x_top and self.y_top for top-level data.
+        If the files do not exist, it will not raise an error but will skip the loading.
+        Note: This method assumes that the processed data has been saved in the expected format.
         """
         train_path = os.path.join(
             self.processed_path, f"train_{self.proc_output_name}.npy"
@@ -1017,7 +1020,7 @@ class FullJetData(object):
         if os.path.isfile(test_path):
             self.x = np.load(test_path)
             print(f"Loaded x_test from {test_path} with shape {self.x.shape}")
-        # Load labels
+
         train_labels_path = os.path.join(
             self.processed_path, f"train_labels_{self.proc_output_name}.npy"
         )
@@ -1037,8 +1040,16 @@ class FullJetData(object):
     # ---------------------------------------------------------------------
     def _norm_split(self, X, y, features) -> tuple:
         """
-        Flatten X to 2D => scale => train/test => reshape back if desired.
-        Return X_train, X_test, y_train, y_test, scaler.
+        Normalize the 3D data X and split it into training and test sets. 
+        This method flattens the 3D array, applies a mask to ignore missing constituents,
+        and then uses a RobustScaler to normalize the specified features.
+        Currently, it does not apply normalization as one added a batch normalization layer in the model.
+        The data is plotted before and after normalization for visual inspection.
+
+        Args:
+            X: 3D NumPy array of shape (nEvents, nConstituents, nFeatures).
+            y: Labels corresponding to the events in X.
+            features: List of feature names to normalize.
         """
 
         # 1) Flatten and Mask the missing constituents with nan so that they are ignored in the scaling
@@ -1048,13 +1059,6 @@ class FullJetData(object):
         X = X.astype(np.float32)
         X = np.where(mask, np.nan, X)
 
-        # --- DEBUG #1: puppiWeight summary BEFORE split ---
-        pw_idx = features.index("puppiWeight")
-        pw_all = X[:, :, pw_idx]
-        print(f"\n[DEBUG] puppiWeight (daughter 0) before split:")
-        print("  Sample values:", pw_all[:3, 0])  # first 3 events
-        print("  Min:", np.nanmin(pw_all), " Max:", np.nanmax(pw_all))
-        print("  Mean:", np.nanmean(pw_all))
 
         # mask = X == -1
         # np.where(np.sum(mask, axis=1) < mask.shape[-1], True, False)
@@ -1071,29 +1075,6 @@ class FullJetData(object):
         X_train_3d_before = X_train.reshape(-1, nC, nF)
         self._plot_all_features(X_train_3d_before, features, stage="before")
 
-        # --- DEBUG #2: puppiWeight summary AFTER split, BEFORE scale ---
-        # reshape back just for the debug
-        tr_pw = X_train.reshape(-1, nC, nF)[:, :, pw_idx]
-        te_pw = X_test.reshape(-1, nC, nF)[:, :, pw_idx]
-        print(f"\n[DEBUG] puppiWeight after split (no scaling):")
-        print("  TRAIN Sample:", tr_pw[:3, 0])
-        print(
-            "    Min:",
-            np.nanmin(tr_pw),
-            " Max:",
-            np.nanmax(tr_pw),
-            " Mean:",
-            np.nanmean(tr_pw),
-        )
-        print("  TEST  Sample:", te_pw[:3, 0])
-        print(
-            "    Min:",
-            np.nanmin(te_pw),
-            " Max:",
-            np.nanmax(te_pw),
-            " Mean:",
-            np.nanmean(te_pw),
-        )
 
         # 3) Figure out which features to normalize
         skip = (
@@ -1120,29 +1101,6 @@ class FullJetData(object):
         # X_train[:, col_idxs] = scaler.fit_transform(X_train[:, col_idxs])
         # X_test[:,  col_idxs] = scaler.transform(X_test[:,  col_idxs])
 
-        # --- DEBUG #3: puppiWeight summary AFTER scaling (should be unchanged) ---
-        tr_pw_after = X_train.reshape(-1, nC, nF)[:, :, pw_idx]
-        te_pw_after = X_test.reshape(-1, nC, nF)[:, :, pw_idx]
-        print(f"\n[DEBUG] puppiWeight after scaling (d0):")
-        print("  TRAIN Sample:", tr_pw_after[:3, 0])
-        print(
-            "    Min:",
-            np.nanmin(tr_pw_after),
-            " Max:",
-            np.nanmax(tr_pw_after),
-            " Mean:",
-            np.nanmean(tr_pw_after),
-        )
-        print("  TEST  Sample:", te_pw_after[:3, 0])
-        print(
-            "    Min:",
-            np.nanmin(te_pw_after),
-            " Max:",
-            np.nanmax(te_pw_after),
-            " Mean:",
-            np.nanmean(te_pw_after),
-        )
-
         # 6) reshape back to 3D
         # X_train.shape = (nEv, nC*nF) => (nEv, nC, nF)
         # X_test.shape  = (nEv, nC*nF) => (nEv, nC, nF)
@@ -1163,7 +1121,9 @@ class FullJetData(object):
     # Step 7b: K-fold splitting
     # -------------------------------------------------------------
     def _split_kfold(self) -> None:
-        """Split into k folds if requested."""
+        """
+        Split into k folds if requested.
+        """
         if self.kfolds > 0 and self.train:
             print(f"[_split_kfold] Using {self.kfolds}-fold cross-validation...")
             skf = sklearn.model_selection.StratifiedKFold(
@@ -1175,9 +1135,8 @@ class FullJetData(object):
 
             # Convert back from one-hot to class targets since sklearn function does not
             # like one-hot targets.
-            self.kfolds = skf.split(self.x, np.argmax(self.y, axis=-1))
+            self.kfold_indices = list(skf.split(self.x, np.argmax(self.y, axis=-1)))
 
-            # Possibly store the splits for usage later.
 
     # -------------------------------------------------------------
     # Step 8: Load test data
@@ -1227,7 +1186,9 @@ class FullJetData(object):
     # Utility
     # -------------------------------------------------------------
     def show_details(self) -> None:
-        """Print some info about current data shapes."""
+        """
+        Print some info about current data shapes.
+        """
         print("Data shape X:", None if self.x is None else self.x.shape)
         print("Data shape y:", None if self.y is None else self.y.shape)
         print("Number of folds:", self.kfolds)

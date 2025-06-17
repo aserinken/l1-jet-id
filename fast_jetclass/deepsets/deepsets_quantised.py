@@ -46,7 +46,7 @@ class DeepSetsInvQuantised(keras.Model):
         self._build_phi()
         self._build_agg()
         self._build_rho()
-        self.output_layer = KL.Dense(self.output_dim, name="OutputLayer")
+        self.output_layer = KL.Dense(self.output_dim, activation="sigmoid", name="OutputLayer")
 
     def _build_phi(self):
         self.phi = keras.Sequential(name="PhiNetwork")
