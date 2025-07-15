@@ -28,7 +28,7 @@ class ModelComparisonAnalysis:
         self.nconst_values = nconst_values
         self.do_comparison = do_comparison
         self.model_path = Path(path_to_dir) 
-        self.dir_path = self.model_path / "data" / "test"
+        self.dir_path = self.model_path / "data" / "test" / "SC8Data"
         
     def get_paths_data(self, nconst_list=None, dir_path=None):
         """
@@ -163,7 +163,7 @@ class ModelComparisonAnalysis:
 
         all_models = {}
         for n in nconst_list:
-            model_dir = model_root / f"SC8_synth_morebackground_deepsets_8bit_{n}const" / "kfolding1"
+            model_dir = model_root / f"SC8_1node_{n}const_synth" / "kfolding1"
             if not model_dir.is_dir():
                 print(f"Warning: Model directory not found for nconst={n}: {model_dir}")
                 all_models[n] = None
@@ -224,11 +224,11 @@ class ModelComparisonAnalysis:
         # Suppose the model outputs shape (N, 2): background vs signal probabilities
         y_pred_probs = model.predict(x_test_3d)  # shape = (numSamples, 2)
         # Probability of “signal” is column index 1
-        signal_scores = y_pred_probs[:, 1]
+        signal_scores = y_pred_probs.flatten()  # shape = (numSamples,)
 
         # y_test_3d is one-hot (e.g. [[1,0],[0,1],...]),
         # convert it to integer labels [0 or 1]
-        y_true = np.argmax(y_test_3d, axis=1)
+        y_true = y_test_3d.flatten()
 
         # binary predictions from signal_scores
         y_pred = (signal_scores > 0.5).astype(int)
@@ -271,7 +271,7 @@ class ModelComparisonAnalysis:
                 continue
 
             # Convert one-hot labels to integer labels
-            y_true = np.argmax(y_test_3d, axis=1)
+            y_true = y_test_3d.flatten()  # Assuming y_test_3d is already in binary format
 
             # Load the corresponding model
             all_models = self.get_paths_models()
@@ -282,7 +282,7 @@ class ModelComparisonAnalysis:
 
             # Generate predictions
             y_pred_probs = model.predict(x_test_3d)  
-            signal_scores = y_pred_probs[:, 1]
+            signal_scores = y_pred_probs.flatten()  # shape = (numSamples,)
 
             # Compute ROC curve and AUC
             fpr, tpr, _ = roc_curve(y_true, signal_scores)
@@ -377,7 +377,7 @@ class ModelComparisonAnalysis:
         # 2D top-level data and 3D labels.
         twoD = data["2d_data"]
         # Convert 3D one-hot labels into binary ones.
-        y_true = np.argmax(data["3d_labels"], axis=1)
+        y_true = data["3d_labels"].flatten()
         x3d = data["3d_data"]
 
         total_signal = np.sum(y_true == 1)
@@ -412,10 +412,8 @@ class ModelComparisonAnalysis:
             return
         # Compute raw model predictions (logits)
         y_pred_probs = model.predict(x3d)
-        # Apply softmax to get probabilities (note: y_pred_probs shape = (numSamples, numClasses))
-        probs = tf.nn.softmax(y_pred_probs).numpy()
         # Extract probability of the "signal" class (assumed at column index 1)
-        signal_scores = probs[:, 1]
+        signal_scores = y_pred_probs.flatten()
         # Select the fixed events from the computed probabilities
         signal_scores_fixed = signal_scores[fixed_mask]
 
@@ -513,7 +511,7 @@ class ModelComparisonAnalysis:
             print(f"Missing data for nconst={first_nconst}. Cannot compute baseline.")
             return
         twoD_base = base_data["2d_data"]
-        y_true_base = np.argmax(base_data["3d_labels"], axis=1)
+        y_true_base = (base_data["3d_labels"]).flatten()
         total_signal_base = np.sum(y_true_base == 1)
         total_background_base = np.sum(y_true_base == 0)
         baseline_eff = []
@@ -560,7 +558,7 @@ class ModelComparisonAnalysis:
                 continue
 
             twoD = data["2d_data"]
-            y_true = np.argmax(data["3d_labels"], axis=1)
+            y_true = data["3d_labels"].flatten()
             x3d = data["3d_data"]
 
             # --- With Tagger: Apply fixed pt & |eta| condition ---
@@ -579,9 +577,7 @@ class ModelComparisonAnalysis:
                 continue
 
             y_pred_probs = model.predict(x3d)
-            # Apply softmax to get probabilities.
-            probs = tf.nn.softmax(y_pred_probs).numpy()
-            signal_scores = probs[:, 1]
+            signal_scores = y_pred_probs.flatten()
             signal_scores_fixed = signal_scores[fixed_mask]
 
             print(f"[nconst={nconst}] Signal score stats (fixed events): "
@@ -644,7 +640,7 @@ class ModelComparisonAnalysis:
 
         twoD   = data["2d_data"]
         x3d    = data["3d_data"]
-        y_true = np.argmax(data["3d_labels"], axis=1)     # 0 = bkg , 1 = sig
+        y_true = data["3d_labels"].flatten()     # 0 = bkg , 1 = sig
 
         # kinematic mask (same cuts you had)
         mask = (twoD[:, 0] >= pt_cut) \
@@ -658,7 +654,7 @@ class ModelComparisonAnalysis:
         if model is None:
             print("Model not found.");  return
 
-        scores = model.predict(x3d)[:, 1]
+        scores = model.predict(x3d).flatten()  # shape = (numSamples,)
         scores_sel = scores[mask]
         y_sel      = y_true[mask]
 
@@ -716,7 +712,7 @@ class ModelComparisonAnalysis:
             print(f"Missing data for nconst={nconst}. Cannot compute baseline.")
             return
         twoD_base = base_data["2d_data"]
-        y_true_base = np.argmax(base_data["3d_labels"], axis=1)
+        y_true_base = (base_data["3d_labels"]).flatten()
         total_signal_base = np.sum(y_true_base == 1)
         total_background_base = np.sum(y_true_base == 0)
 
@@ -799,14 +795,14 @@ class ModelComparisonAnalysis:
 
         twoD = data["2d_data"]                          
         n_events = len(twoD)
-        y_true = np.argmax(data["3d_labels"], axis=1)
+        y_true = data["3d_labels"].flatten()
         bkg_mask_all = (y_true == 0)    
         sig_mask_all = (y_true == 1)                
         n_bkg_events   = bkg_mask_all.sum() 
         n_sig_events   = sig_mask_all.sum()  
 
         # compute scores
-        scores = model.predict(data["3d_data"])[:, 1]
+        scores = model.predict(data["3d_data"]).flatten()
 
         # -------------------------------------------------------------------- #
         # baseline curve (rate vs pT)                                           #
@@ -1012,14 +1008,14 @@ class ModelComparisonAnalysis:
 
         twoD = data["2d_data"]                          
         n_events = len(twoD)
-        y_true = np.argmax(data["3d_labels"], axis=1)
+        y_true = data["3d_labels"].flatten()
         bkg_mask_all = (y_true == 0)    
         sig_mask_all = (y_true == 1)               
         n_bkg_events   = bkg_mask_all.sum() 
         n_sig_events   = sig_mask_all.sum()  
 
         # tagger scores
-        scores = model.predict(data["3d_data"])[:, 1]
+        scores = model.predict(data["3d_data"]).flatten()
 
         # -------------------------------------------------------------------- #
         # baseline curve (rate vs pT)                                           #

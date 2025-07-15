@@ -59,6 +59,8 @@ def main(args, synth_config: dict):
 
 
     model_activations = get_model_activations(model)
+    print(tcols.HEADER + "Model activations: " + tcols.ENDC)
+    print(model_activations)
     # Set the model activation function rounding and saturation modes.
     hls4ml.model.optimizer.get_optimizer("output_rounding_saturation_mode").configure(
         layers=model_activations,
@@ -93,7 +95,7 @@ def main(args, synth_config: dict):
     hls_model.compile()
     if args.diagnose:
         print(tcols.OKGREEN + "\nRUNNING MODEL DIAGNOSTICS" + tcols.ENDC)
-        run_trace(model, hls_model, valid_data.x, synthesis_dir)
+        run_trace(model, hls_model, valid_data.x, synthesis_dir, sample_idx=args.sample)
         profile_model(model, hls_model, valid_data.x, synthesis_dir)
     hls_model.write()
 
@@ -150,7 +152,6 @@ def roc_curves_comparison(outdir: str,
     }
     curve_styles = {
         "raw":   {"linestyle": "-",  "label_fmt": "{} 2prong"},
-        "ratio": {"linestyle": "--", "label_fmt": "{} ratio"},
     }
 
     # baseline TPR axis (for interpolation)
@@ -203,8 +204,10 @@ def roc_curves_comparison(outdir: str,
 
     plt.xlabel("True Positive Rate")
     plt.ylabel("False Positive Rate")
+    plt.title("ROC Curves Comparison")
     plt.ylim(1e-3, 1)
-    plt.xlim(0.9, 1)
+    plt.xlim(0.8, 1)
+    plt.grid()
     plt.semilogy()
     plt.legend(prop={"size": 11})
     plt.tight_layout()
@@ -274,7 +277,7 @@ def profile_model(
     )
 
 
-def run_trace(model: keras.Model, hls_model: hls4ml.model, data: np.ndarray, outdir):
+def run_trace(model: keras.Model, hls_model: hls4ml.model, data: np.ndarray, outdir, sample_idx: int = 0):
     """Shows output of every layer given a certain sample.
 
     This is used to compute the outputs in every layer for the hls4ml firmware model
@@ -283,8 +286,40 @@ def run_trace(model: keras.Model, hls_model: hls4ml.model, data: np.ndarray, out
     indicative that the precision of these outputs should be set higher manually
     in hls4ml.
     """
+    # ---- run trace for one event ------------------------------------
+    x_one   = data[sample_idx : sample_idx + 1]          # keep batch dim
+    _, hls_t = hls_model.trace(x_one)
+    keras_t  = get_ymodel_keras(model, x_one)
+
+    # ---- console diff summary ---------------------------------------
+    rows = []
+    for layer in model.layers:
+        if layer.name == "input_layer":
+            continue
+        ref = keras_t[layer.name][0]
+        dut = hls_t[layer.name][0]
+        err = np.max(np.abs(ref - dut))
+        rows.append((layer.name, ref.shape, err))
+
+    rows.sort(key=lambda r: r[2], reverse=True)
+
+    print(f"\n🔍  layer-wise max|Δ| for sample {sample_idx}")
+    print("{:<24s} {:<14s} {:>10s}".format("layer", "shape", "max|Δ|"))
+    print("-"*50)
+    for name, shape, err in rows:
+        flag = " !!" if err > 1e-3 else ""
+        print(f"{name:<24s} {str(shape):<14s} {err:10.4e}{flag}")
+
+    # ---- CSV for later -------------------------------------
+    import csv, os
+    csv_path = os.path.join(outdir, f"trace_diff_sample{sample_idx}.csv")
+    with open(csv_path, "w", newline="") as f:
+        w = csv.writer(f); w.writerow(["layer", "shape", "max_abs_diff"]); w.writerows(rows)
+    print(f"📄  full diff table written to {csv_path}")
+
+
     # Show the weights of the network only for 3 of the samples, as defined below.
-    sample_numbers = [0, 49, 99]
+    sample_numbers = [sample_idx]
 
     # Take just the first 100 events of the data set.
     hls4ml_pred, hls4ml_trace = hls_model.trace(data[:100])
@@ -318,6 +353,7 @@ def get_model_activations(model: keras.Model):
     for layer in model.layers:
         if "activation" in layer.name:
             model_activations.append(layer.name)
+
 
     return model_activations
 

@@ -9,17 +9,31 @@ LayerName:
     result: "ap_fixed<24, 12, AP_RND, AP_SAT>"
   batch_normalization:
     Precision: "ap_fixed<24, 12, AP_RND, AP_SAT>"
-    result: "ap_fixed<24, 12, AP_RND, AP_SAT>"
+    result: "ap_fixed<24, 8, AP_RND, AP_SAT>"
+  global_average_pooling1d:
+      Precision:
+        result: "ap_fixed<18, 10, AP_RND, AP_SAT>"
+      Trace: true
   phi1:
     ParallelizationFactor: 1
+    Precision:
+      bias: fixed<20,4,TRN,WRAP,0>
+      result: auto
+      weight: fixed<20,4,TRN,WRAP,0>
     ReuseFactor: 1
-    Strategy: "Latency"
+    Strategy: Latency
+    Trace: true
   output:
       Implementation: "latency"
       Precision:
-        result: "ap_ufixed<24,12,AP_RND,AP_SAT>"
-  output_sigmoid:
+        result: "ap_fixed<20,10,AP_RND,AP_SAT>"
+  output_linear:
       Precision:
-        result: ap_ufixed<32,16,AP_RND,AP_SAT>
+        result: "ap_fixed<20,10,AP_RND,AP_SAT>"
+      Trace: true
+  output_sigmoid_activation:
+      Precision:
+        result: ap_ufixed<20,10,AP_RND,AP_SAT>
       Trace: True
+
 

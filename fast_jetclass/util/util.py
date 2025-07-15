@@ -33,7 +33,7 @@ def make_output_directory(location: str, outdir: str) -> str:
 def import_data(config: dict, train: bool):
     """Imports the jet data, ready for training."""
     print(tcols.OKGREEN + "Importing data... " + tcols.ENDC, end="")
-    jet_data = FullJetData(**config, train=train)
+    jet_data = SC8Data(**config, train=train)
 
     print(tcols.OKGREEN, end="")
     print("training data imported!" if train else "validation data imported!")

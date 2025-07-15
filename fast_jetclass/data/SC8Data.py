@@ -13,255 +13,207 @@ from pathlib import Path
 
 class SC8Data(object):
     """
-    A simplified data class for loading and processing flat jet ROOT data.
+    Loader for flat jet ROOT samples that contain BOTH signal- and background-jets
+    differentiated by `jet_genmatch_Nprongs` (2 → signal, 0 → background).
 
-    This class supports padded constituent arrays per jet and extracts both jet-level and constituent-level features
-    from a flat ROOT tree, eliminating the need for SC8-Puppi matching and custom PDG one-hot encoding.
-
-    Args:
-        root: Directory where raw ROOT files are located.
-        nconst: Number of constituents per jet (padded or truncated).
-        train: Whether to load training (True) or test (False) data.
-        datasets: Dict with keys "bkg" and "sig" pointing to lists of ROOT file paths.
-        padding_value: Value used to pad missing constituents.
-        test_size: Fraction of data used for testing if splitting.
-        random_state: Seed for reproducibility.
+    The label array `y` is shape (N, 1) with values 0 or 1.
     """
+
+    # -------------------------------------------------------- INIT ----
     def __init__(
-            self,
-            root: str,
-            nconst: int=32,
-            train: bool=True,
-            datasets: dict=None,
-            padding_value: float=0.0,
-            test_size: float=0.2,
-            random_state: int=42,
-            kfolds: int=0,
+        self,
+        root: str,
+        nconst: int = 32,
+        train: bool = True,
+        datasets: dict | None = None,         
+        padding_value: float = 0.0,
+        test_size: float = 0.2,
+        random_state: int = 42,
+        kfolds: int = 0,
+        nprong_branch: str = "jet_genmatch_Nprongs",
     ):
         super().__init__()
         self.root = Path(root)
         self.nconst = nconst
         self.train = train
-        self.datasets = datasets if datasets else {}
+        self.datasets = datasets or {}
         self.padding_value = padding_value
         self.test_size = test_size
         self.random_state = random_state
         self.kfolds = kfolds
         self.seed = random_state
+        self.nprong_branch = nprong_branch
 
         self.output_dir = self.root / "SC8Data"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Jet-level and constituent-level features
+        # feature lists -------------------------------------------------
         self.jet_features = [
-            "jet_eta", "jet_phi", "jet_pt", "jet_mass", "jet_energy"
+            "jet_pt_phys", "jet_eta_phys", "jet_phi_phys", "jet_mass"
         ]
         self.constit_features = [
-            "jet_pfcand_pt", "jet_pfcand_pt_rel","jet_pfcand_pt_log",
+            "jet_pfcand_pt", "jet_pfcand_pt_rel", "jet_pfcand_pt_log",
             "jet_pfcand_deta", "jet_pfcand_dphi", "jet_pfcand_mass",
-            "jet_pfcand_isPhoton", "jet_pfcand_isElectronPlus", "jet_pfcand_isElectronMinus", 
-            "jet_pfcand_isMuonPlus", "jet_pfcand_isMuonMinus", "jet_pfcand_isNeutralHadron",
-            "jet_pfcand_isChargedHadronMinus", "jet_pfcand_isChargedHadronPlus", "jet_pfcand_z0",
-            "jet_pfcand_dxy", "jet_pfcand_isfilled", "jet_pfcand_puppiweight",
-            "jet_pfcand_emid", "jet_pfcand_quality"
+            "jet_pfcand_isPhoton", "jet_pfcand_isElectronPlus",
+            "jet_pfcand_isElectronMinus", "jet_pfcand_isMuonPlus",
+            "jet_pfcand_isMuonMinus", "jet_pfcand_isNeutralHadron",
+            "jet_pfcand_isChargedHadronMinus", "jet_pfcand_isChargedHadronPlus",
+            "jet_pfcand_z0", "jet_pfcand_dxy", "jet_pfcand_isfilled",
+            "jet_pfcand_puppiweight", "jet_pfcand_emid", "jet_pfcand_quality"
         ]
 
-        # Final data arrays
-        self.x = None
-        self.x_top = None
-        self.y = None
+        # public containers --------------------------------------------
+        self.x = self.x_top = self.y = None
         self.kfold_indices = None
+        self.njets = self.nfeats = None
 
-        # Set after loading
-        self.njets = None
-        self.nfeats = None
-
-        # Load and process data
-        # In __init__:
+        # ------------------------------------------------ LOAD PIPELINE
         if self.train:
-            self._load_all()
-            self._combine()
+            self._load_all()          # fills self.x, self.x_top, self.y
             self._split_train_test()
             self._plot_feature_histograms()
             self.save_split_data()
-            #lets delete the original data to save memory
-            del self.x_sig, self.x_top_sig, self.y_sig
-            del self.x_bkg, self.x_top_bkg, self.y_bkg
-            del self.x, self.x_top, self.y
-            self.load_split_data()
-            if self.kfolds > 0 and self.train:
+            if self.kfolds > 0:
                 self._split_kfold()
-            # Set counts
-            self.njets = self.x.shape[0]
-            self.nfeats = self.x.shape[-1]
         else:
             self.load_split_data()
-            self.njets = self.x.shape[0]
-            self.nfeats = self.x.shape[-1]
 
-        
-        self.x_top = None
+        self.njets = self.x.shape[0]
+        self.nfeats = self.x.shape[-1]
 
+    # ----------------------------------------------- ROOT → numpy -----
     def _load_all(self):
-        """Load all signal and background ROOT files into memory."""
-        self.x_sig, self.x_top_sig, self.y_sig = self._load_class(self.datasets.get("sig", []), 1)
-        self.x_bkg, self.x_top_bkg, self.y_bkg = self._load_class(self.datasets.get("bkg", []), 0)
-        print("[FullJetDataV2] Loaded signal and background data:")
+        """Read every ROOT file once and build (x, x_top, y) with scalar labels."""
+        xs, x_tops, ys = [], [], []
 
-    def _load_class(self, file_list, label):
-        """Load ROOT files of a specific class (signal or background)."""
-        x_all, x_top_all, y_all = [], [], []
+        file_list = self.datasets.get("all", [])
+        if not file_list:
+            raise ValueError("datasets['all'] must list at least one ROOT file.")
 
         for path in file_list:
-            print(f"[DEBUG] Opening file: {path}")
+            print(f"[DEBUG] Opening {path}")
             with uproot.open(path)["outnano/Jets;1"] as tree:
                 if tree.num_entries == 0:
-                    print(f"[DEBUG] Skipping file with 0 entries: {path}")
+                    print("[DEBUG]   0 entries → skipped")
                     continue
-                all_fields = self.jet_features + self.constit_features
-                all_data = tree.arrays(all_fields, library="ak")
-                print("[DEBUG] Loaded all fields:", all_data.fields)
 
-                x_top = np.stack([ak.to_numpy(all_data[f]) for f in self.jet_features], axis=-1)
-                x_top_all.append(x_top)
+                branches = (
+                    self.jet_features +
+                    self.constit_features +
+                    [self.nprong_branch]
+                )
+                arr = tree.arrays(branches, library="ak")
 
-                pfcand_dict = {f: all_data[f] for f in self.constit_features}
-                const_arr = ak.zip(pfcand_dict)
-                const_arr = ak.pad_none(const_arr, self.nconst, clip=True)
-                const_arr = ak.fill_none(const_arr, {key: self.padding_value for key in self.constit_features})
-                const_arr = ak.to_regular(const_arr)
+                # jet-level tensor --------------------------------------
+                x_top = np.stack(
+                    [ak.to_numpy(arr[f]) for f in self.jet_features], axis=-1
+                )
 
-                stacked = np.stack([ak.to_numpy(const_arr[f]) for f in const_arr.fields], axis=-1)
-                x_all.append(stacked)
+                # constituent tensor ------------------------------------
+                cons = ak.zip({f: arr[f] for f in self.constit_features})
+                cons = ak.pad_none(cons, self.nconst, clip=True)
+                cons = ak.fill_none(
+                    cons, {k: self.padding_value for k in self.constit_features}
+                )
+                cons = ak.to_regular(cons)
+                x_const = np.stack(
+                    [ak.to_numpy(cons[f]) for f in cons.fields], axis=-1
+                )
 
-                n_jets = len(all_data[self.jet_features[0]])
-                y_all.append(np.full(n_jets, label))
-                print(f"[DEBUG] Selected {n_jets} jets from file: {path}")
+                # labels -------------------------------------------------
+                npr = ak.to_numpy(arr[self.nprong_branch])
+                mask_sig = npr == 2
+                mask_bkg = npr == 0
 
-        if not x_all:
-            raise ValueError(f"No usable data found for label {label}. All files may be empty or invalid.")
+                if mask_sig.any():
+                    xs.append(x_const[mask_sig])
+                    x_tops.append(x_top[mask_sig])
+                    ys.append(np.ones(mask_sig.sum(), dtype=np.int8))
 
-        x = np.concatenate(x_all, axis=0)
-        x_top = np.concatenate(x_top_all, axis=0)
-        y = np.concatenate(y_all, axis=0)
-        y = np.eye(2)[y]  # One-hot encoding
+                if mask_bkg.any():
+                    xs.append(x_const[mask_bkg])
+                    x_tops.append(x_top[mask_bkg])
+                    ys.append(np.zeros(mask_bkg.sum(), dtype=np.int8))
 
-        max_events = 100000
-        if x.shape[0] > max_events:
-            print(f"[DEBUG] Limiting to first {max_events} events for label {label}.")
-            idx = np.random.default_rng(self.random_state).choice(x.shape[0], max_events, replace=False)
-            x = x[idx]
-            x_top = x_top[idx]
-            y = y[idx]
-        
-        return x, x_top, y
+                print(f"[DEBUG]   kept {mask_sig.sum()+mask_bkg.sum()} jets")
 
-    def _combine(self):
-        """Combine signal and background data."""
-        self.x = np.concatenate([self.x_bkg, self.x_sig], axis=0)
-        self.x_top = np.concatenate([self.x_top_bkg, self.x_top_sig], axis=0)
-        self.y = np.concatenate([self.y_bkg, self.y_sig], axis=0)
+        self.x      = np.concatenate(xs,      axis=0)
+        self.x_top  = np.concatenate(x_tops,  axis=0)
+        self.y      = np.concatenate(ys,      axis=0)[:, None]   # (N,1)
 
-        print("[FullJetDataV2] Combined x shape:", self.x.shape)
-        print("[FullJetDataV2] Combined x_top shape:", self.x_top.shape)
-        print("[FullJetDataV2] Combined y shape:", self.y.shape)
+        sig = int(self.y.sum())
+        bkg = self.y.shape[0] - sig
+        print(f"[INFO] Loaded total jets: {self.y.shape[0]}  (sig={sig}, bkg={bkg})")
 
+    # ------------------------------------------------ train/test split
     def _split_train_test(self):
-        """Split the combined data into training and test sets and store both splits."""
-        if self.test_size > 0:
-            from sklearn.model_selection import train_test_split
-            (self.x_train, self.x_test, 
-            self.x_top_train, self.x_top_test, 
-            self.y_train, self.y_test) = train_test_split(
-                self.x, self.x_top, self.y,
-                test_size=self.test_size, random_state=self.random_state,
-                stratify=np.argmax(self.y, axis=-1)
-            )
-            if self.train:
-                self.x, self.x_top, self.y = self.x_train, self.x_top_train, self.y_train
-                print("[FullJetDataV2] Training data shapes:", self.x.shape, self.x_top.shape, self.y.shape)
-            else:
-                self.x, self.x_top, self.y = self.x_test, self.x_top_test, self.y_test
-                print("[FullJetDataV2] Test data shapes:", self.x.shape, self.x_top.shape, self.y.shape)
-
-    def _split_kfold(self) -> None:
-        """Split into k folds if requested."""
-        if self.kfolds > 0 and self.train:
-            print(f"[_split_kfold] Using {self.kfolds}-fold cross-validation...")
-            skf = StratifiedKFold(n_splits=self.kfolds, shuffle=True, random_state=self.seed)
-            self.kfold_indices = list(skf.split(self.x, np.argmax(self.y, axis=-1)))
-
-
-    def show_details(self):
-        print("[FullJetDataV2] x shape:", self.x.shape)
-        print("[FullJetDataV2] y shape:", self.y.shape)
-        print("[FullJetDataV2] Jet features:", self.jet_features)
-        print("[FullJetDataV2] Constituent features:", self.constit_features)
-        print("[FullJetDataV2] nconst:", self.nconst)
-        print("[FullJetDataV2] padding value:", self.padding_value)
-        print("[FullJetDataV2] njets:", self.njets)
-        print("[FullJetDataV2] nfeats:", self.nfeats)
-
-    def _plot_feature_histograms(self):
-        """Plot and save histograms for top-level and all-constituent features."""
-
-        fig_top, axs_top = plt.subplots(len(self.jet_features), 1, figsize=(6, len(self.jet_features)*2))
-        for i, feature in enumerate(self.jet_features):
-            axs_top[i].hist(self.x_top[:, i], bins=50, alpha=0.7)
-            axs_top[i].set_title(f"Top-level feature: {feature}")
-        fig_top.tight_layout()
-        top_path = self.root / "top_level_features.png"
-        fig_top.savefig(top_path)
-        print(f"[INFO] Saved top-level histograms to {top_path}")
-        plt.close(fig_top)
-
-        fig_const, axs_const = plt.subplots(len(self.constit_features), 1, figsize=(6, len(self.constit_features)*2))
-        for i, feature in enumerate(self.constit_features):
-            axs_const[i].hist(self.x[:, :, i].flatten(), bins=50, alpha=0.7)
-            axs_const[i].set_title(f"All constituent: {feature}")
-            axs_const[i].set_yscale('log')
-        fig_const.tight_layout()
-        const_path = self.root / "constituent_features.png"
-        fig_const.savefig(const_path)
-        print(f"[INFO] Saved constituent histograms to {const_path}")
-        plt.close(fig_const)
-
-    def save_split_data(self, out_dir: str = None) -> None:
-        """
-        Save both the training and test data arrays to .npy files in a designated directory.
-        If out_dir is not provided, a default folder 'saved_data' under self.root is used.
-        """
-        import os
-        import numpy as np
-        out_dir = self.output_dir
-        if out_dir is None:
-            out_dir = os.path.join(self.root, "saved_data")
-        os.makedirs(out_dir, exist_ok=True)
-
-        np.save(os.path.join(out_dir, "train_x.npy"), self.x_train)
-        np.save(os.path.join(out_dir, "train_x_top.npy"), self.x_top_train)
-        np.save(os.path.join(out_dir, "train_y.npy"), self.y_train)
-        np.save(os.path.join(out_dir, "test_x.npy"), self.x_test)
-        np.save(os.path.join(out_dir, "test_x_top.npy"), self.x_top_test)
-        np.save(os.path.join(out_dir, "test_y.npy"), self.y_test)
-
-        print(f"[INFO] Saved training data to {os.path.join(out_dir, 'train_*.npy')}")
-        print(f"[INFO] Saved test data to {os.path.join(out_dir, 'test_*.npy')}")
-
-    def load_split_data(self, out_dir: str = None) -> None:
-        """
-        Load the test data arrays from .npy files in the designated directory.
-        If out_dir is not provided, a default folder 'saved_data' under self.root is used.
-        """
-        import os
-        import numpy as np
-
-        out_dir = self.output_dir if self.output_dir is not None else os.path.join(self.root, "saved_data")
+        if self.test_size <= 0:
+            return
+        (self.x_train, self.x_test,
+         self.x_top_train, self.x_top_test,
+         self.y_train, self.y_test) = train_test_split(
+            self.x, self.x_top, self.y,
+            test_size=self.test_size,
+            random_state=self.random_state,
+            stratify=self.y.ravel()          # ← scalar labels
+        )
         if self.train:
-            self.x = np.load(os.path.join(out_dir, "train_x.npy"))
-            self.y = np.load(os.path.join(out_dir, "train_y.npy"))
+            self.x, self.x_top, self.y = self.x_train, self.x_top_train, self.y_train
+            tag = "Training"
         else:
-            self.x = np.load(os.path.join(out_dir, "test_x.npy"))
-            self.y = np.load(os.path.join(out_dir, "test_y.npy"))
-        print(f"[INFO] Loaded test data shapes: x: {self.x.shape}, y: {self.y.shape}")
+            self.x, self.x_top, self.y = self.x_test, self.x_top_test, self.y_test
+            tag = "Test"
+        print(f"[INFO] {tag} shapes: x={self.x.shape}, y={self.y.shape}")
 
+    # ------------------------------------------------ K-fold split
+    def _split_kfold(self):
+        print(f"[INFO] {self.kfolds}-fold CV split …")
+        skf = StratifiedKFold(
+            n_splits=self.kfolds, shuffle=True, random_state=self.seed
+        )
+        self.kfold_indices = list(skf.split(self.x, self.y.ravel()))
 
+    # ------------------------------------------------ plots (optional)
+    def _plot_feature_histograms(self):
+        fig, axs = plt.subplots(len(self.jet_features), 1,
+                                figsize=(6, 2 * len(self.jet_features)))
+        for i, f in enumerate(self.jet_features):
+            axs[i].hist(self.x_top[:, i], bins=50, alpha=0.7)
+            axs[i].set_title(f)
+        fig.tight_layout()
+        fig.savefig(self.output_dir / "top_level_features.png")
+        plt.close(fig)
+
+        fig, axs = plt.subplots(len(self.constit_features), 1,
+                                figsize=(6, 2 * len(self.constit_features)))
+        for i, f in enumerate(self.constit_features):
+            axs[i].hist(self.x[:, :, i].ravel(), bins=50, alpha=0.7, log=True)
+            axs[i].set_title(f)
+        fig.tight_layout()
+        fig.savefig(self.output_dir / "constituent_features.png")
+        plt.close(fig)
+
+    # ------------------------------------------------ save / load
+    def save_split_data(self):
+        np.save(self.output_dir / f"proc_train_{self.const}const.npy",     self.x_train)
+        np.save(self.output_dir / f"proc_top_train_{self.const}const.npy", self.x_top_train)
+        np.save(self.output_dir / f"proc_top_labels_train_{self.const}const.npy", self.y_train)
+        np.save(self.output_dir / f"proc_labels_train_{self.const}const.npy",     self.y_train)
+        np.save(self.output_dir / f"proc_test_{self.const}const.npy",      self.x_test)
+        np.save(self.output_dir / f"proc_top_test_{self.const}const.npy",  self.x_top_test)
+        np.save(self.output_dir / f"proc_top_labels_test_{self.const}const.npy",  self.y_test)
+        np.save(self.output_dir / f"proc_labels_test_{self.const}const.npy",      self.y_test)
+
+    def load_split_data(self):
+        subset = "train" if self.train else "test"
+        self.x     = np.load(self.output_dir / f"proc_{subset}_{self.const}const.npy")
+        self.x_top = np.load(self.output_dir / f"proc_top_{subset}_{self.const}const.npy")
+        self.y     = np.load(self.output_dir / f"proc_labels_{subset}_{self.const}const.npy")
+        print(f"[INFO] Loaded {subset} arrays: x={self.x.shape}, x_top={self.x_top.shape}, y={self.y.shape}")
+
+    # ------------------------------------------------ quick info
+    def show_details(self):
+        print("x shape :", self.x.shape)
+        print("y shape :", self.y.shape)
+        print("njets   :", self.njets)
+        print("nfeats  :", self.nfeats)

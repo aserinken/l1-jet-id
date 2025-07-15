@@ -17,5 +17,13 @@ LayerName:
   output:
       Implementation: "latency"
       Precision:
-        result: "ap_ufixed<24,12,AP_RND,AP_SAT>"
+        result: "ap_fixed<20,10,AP_RND,AP_SAT>"
+  output_linear:
+      Precision:
+        result: "ap_fixed<20,10,AP_RND,AP_SAT>"
+      Trace: true
+  output_sigmoid_activation:
+      Precision:
+        result: ap_ufixed<20,10,AP_RND,AP_SAT>
+      Trace: True
 

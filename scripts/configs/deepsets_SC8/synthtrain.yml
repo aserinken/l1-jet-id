@@ -1,5 +1,5 @@
 ---
-outdir: 'SC8_synth'
+outdir: 'SC8_onefile_synth'
 data_hyperparams:
 
   root: "/work/aserinke/l1-jet-id/data/test"
@@ -9,27 +9,25 @@ data_hyperparams:
   kfolds: 2
 
   datasets:
-    bkg:
-      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs/SingleNeutrino_PU200_1746011721/data/singneut.root"
-    sig:
-      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs/lightHbb_M20to80_Pt50to200_1745321368/data/lightH.root"
+    all:
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/sc8_with_classes.root"
 
-  test_size: 0.2
+  test_size: 0.20
   random_state: 42
 
 model_type: "sinvariant"
 model_hyperparams:
-  phi_layers: [64]
-  rho_layers: [32, 4]
-  activ: "relu"
-  aggreg: "mean"
-  output_dim: 2
+  phi_layers: [52, 20, 4]
+  rho_layers: [36, 4, 4]
+  activ: "tanh"
+  aggreg: "max"
+  output_dim: 1
   nbits: 8
 
 compilation_hyperparams:
   optimizer: "adam"
   optimizer_hps:
-    learning_rate: 0.0029
+    learning_rate: 0.001
     jit_compile: false
   optimizer_callbacks:
     early_stopping:
@@ -41,12 +39,12 @@ compilation_hyperparams:
       patience: 10
       min_lr: 0.0001
 
-  loss: "softmax_with_crossentropy"
+  loss: "binary_crossentropy"
   metrics: ["accuracy"]
   early_stopping: 20
 
 training_hyperparams:
-  batch_size: 128
+  batch_size: 2048
   epochs: 1000
   shuffle: True
   verbose: 2

@@ -53,7 +53,7 @@ def main(args):
     compute_average_metrics(kfold_metrics, args.root_dir)
 
 
-def evaluate_model(data: FullJetData, hyperparams: dict, model_dir: str, seed: int):
+def evaluate_model(data: SC8Data, hyperparams: dict, model_dir: str, seed: int):
     """Evaluate a model given its hyperparameters."""
     model = import_model(model_dir, hyperparams)
     plots_dir = util.make_output_directories(model_dir, f"plots_{seed}")
@@ -119,7 +119,7 @@ def save_model_weights(model_dir: str, model: keras.Model):
     model.save_weights(weights_file_path, save_format="h5")
 
 
-def run_inference(model: keras.Model, data: FullJetData, plots_dir: str):
+def run_inference(model: keras.Model, data: SC8Data, plots_dir: str):
     """Computes predictions of a model and saves them to numpy files."""
     y_pred = model.predict(data.x)
     # Flatten predictions to shape (n_samples,)

@@ -40,10 +40,10 @@ data_hyperparams:
 
 model_type: "sinvariant"
 model_hyperparams:
-  phi_layers: [64]
-  rho_layers: [32, 4]
-  activ: "relu"
-  aggreg: "mean"
+  phi_layers: [52,20,4]
+  rho_layers: [36, 4, 4]
+  activ: "tanh"
+  aggreg: "max"
   output_dim: 1
   nbits: 8
 
