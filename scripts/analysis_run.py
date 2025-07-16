@@ -34,7 +34,7 @@ def main():
     # Optionally compare models if do_comparison=True
     #analyzer.compare_models()
     analyzer.compare_efficiency_vs_rate( 
-        fixed_pt=100, 
+        fixed_pt=180, 
         fixed_eta=2.4,
         fixed_mass=0,
         pt_thresholds=None, 

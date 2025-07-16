@@ -16,10 +16,9 @@ class SC8Data(object):
     Loader for flat jet ROOT samples that contain BOTH signal- and background-jets
     differentiated by `jet_genmatch_Nprongs` (2 → signal, 0 → background).
 
-    The label array `y` is shape (N, 1) with values 0 or 1.
+    The label array 'y' is shape (N, 1) with values 0 or 1.
     """
 
-    # -------------------------------------------------------- INIT ----
     def __init__(
         self,
         root: str,
@@ -44,11 +43,11 @@ class SC8Data(object):
         self.seed = random_state
         self.nprong_branch = nprong_branch
 
-        self.output_dir = self.root / "SC8Data"
+        self.output_dir = self.root / "SC8Data" / f"{nconst}const" / "processed"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # feature lists -------------------------------------------------
-        self.jet_features = [
+        # feature lists ------------------------------------------------
+        self.base_jet_features = [
             "jet_pt_phys", "jet_eta_phys", "jet_phi_phys", "jet_mass"
         ]
         self.constit_features = [
@@ -61,15 +60,15 @@ class SC8Data(object):
             "jet_pfcand_z0", "jet_pfcand_dxy", "jet_pfcand_isfilled",
             "jet_pfcand_puppiweight", "jet_pfcand_emid", "jet_pfcand_quality"
         ]
+        self.jet_features = list(self.base_jet_features)  # file_id is added later
+        self.file_id_lookup = []
 
-        # public containers --------------------------------------------
         self.x = self.x_top = self.y = None
         self.kfold_indices = None
         self.njets = self.nfeats = None
 
-        # ------------------------------------------------ LOAD PIPELINE
         if self.train:
-            self._load_all()          # fills self.x, self.x_top, self.y
+            self._load_all()         
             self._split_train_test()
             self._plot_feature_histograms()
             self.save_split_data()
@@ -90,15 +89,16 @@ class SC8Data(object):
         if not file_list:
             raise ValueError("datasets['all'] must list at least one ROOT file.")
 
-        for path in file_list:
-            print(f"[DEBUG] Opening {path}")
+        for file_id, path in enumerate(file_list):
+            self.file_id_lookup.append(path)
+            print(f"[DEBUG] Opening {path} (file_id={file_id})")
             with uproot.open(path)["outnano/Jets;1"] as tree:
                 if tree.num_entries == 0:
                     print("[DEBUG]   0 entries → skipped")
                     continue
 
                 branches = (
-                    self.jet_features +
+                    self.base_jet_features +
                     self.constit_features +
                     [self.nprong_branch]
                 )
@@ -106,8 +106,14 @@ class SC8Data(object):
 
                 # jet-level tensor --------------------------------------
                 x_top = np.stack(
-                    [ak.to_numpy(arr[f]) for f in self.jet_features], axis=-1
+                    [ak.to_numpy(arr[f]) for f in self.base_jet_features], axis=-1
                 )
+
+                id_col = np.full((x_top.shape[0], 1), file_id, dtype=np.int32)
+                x_top = np.concatenate((x_top, id_col), axis=-1)  
+
+                if "file_id" not in self.jet_features:
+                    self.jet_features.append("file_id")
 
                 # constituent tensor ------------------------------------
                 cons = ak.zip({f: arr[f] for f in self.constit_features})
@@ -195,20 +201,20 @@ class SC8Data(object):
 
     # ------------------------------------------------ save / load
     def save_split_data(self):
-        np.save(self.output_dir / f"proc_train_{self.const}const.npy",     self.x_train)
-        np.save(self.output_dir / f"proc_top_train_{self.const}const.npy", self.x_top_train)
-        np.save(self.output_dir / f"proc_top_labels_train_{self.const}const.npy", self.y_train)
-        np.save(self.output_dir / f"proc_labels_train_{self.const}const.npy",     self.y_train)
-        np.save(self.output_dir / f"proc_test_{self.const}const.npy",      self.x_test)
-        np.save(self.output_dir / f"proc_top_test_{self.const}const.npy",  self.x_top_test)
-        np.save(self.output_dir / f"proc_top_labels_test_{self.const}const.npy",  self.y_test)
-        np.save(self.output_dir / f"proc_labels_test_{self.const}const.npy",      self.y_test)
+        np.save(self.output_dir / f"proc_train_{self.nconst}const.npy",     self.x_train)
+        np.save(self.output_dir / f"proc_top_train_{self.nconst}const.npy", self.x_top_train)
+        np.save(self.output_dir / f"proc_top_labels_train_{self.nconst}const.npy", self.y_train)
+        np.save(self.output_dir / f"proc_labels_train_{self.nconst}const.npy",     self.y_train)
+        np.save(self.output_dir / f"proc_test_{self.nconst}const.npy",      self.x_test)
+        np.save(self.output_dir / f"proc_top_test_{self.nconst}const.npy",  self.x_top_test)
+        np.save(self.output_dir / f"proc_top_labels_test_{self.nconst}const.npy",  self.y_test)
+        np.save(self.output_dir / f"proc_labels_test_{self.nconst}const.npy",      self.y_test)
 
     def load_split_data(self):
         subset = "train" if self.train else "test"
-        self.x     = np.load(self.output_dir / f"proc_{subset}_{self.const}const.npy")
-        self.x_top = np.load(self.output_dir / f"proc_top_{subset}_{self.const}const.npy")
-        self.y     = np.load(self.output_dir / f"proc_labels_{subset}_{self.const}const.npy")
+        self.x     = np.load(self.output_dir / f"proc_{subset}_{self.nconst}const.npy")
+        self.x_top = np.load(self.output_dir / f"proc_top_{subset}_{self.nconst}const.npy")
+        self.y     = np.load(self.output_dir / f"proc_labels_{subset}_{self.nconst}const.npy")
         print(f"[INFO] Loaded {subset} arrays: x={self.x.shape}, x_top={self.x_top.shape}, y={self.y.shape}")
 
     # ------------------------------------------------ quick info

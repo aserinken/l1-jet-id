@@ -163,7 +163,7 @@ class ModelComparisonAnalysis:
 
         all_models = {}
         for n in nconst_list:
-            model_dir = model_root / f"SC8_1node_{n}const_synth" / "kfolding1"
+            model_dir = model_root / f"SC8_onefile_synth" / "kfolding1"
             if not model_dir.is_dir():
                 print(f"Warning: Model directory not found for nconst={n}: {model_dir}")
                 all_models[n] = None
@@ -362,7 +362,7 @@ class ModelComparisonAnalysis:
 
         # Default range for baseline pt thresholds.
         if pt_thresholds is None:
-            pt_thresholds = np.arange(0, 1000, 10)  # adjust limits and step as needed
+            pt_thresholds = np.arange(0, 5000, 10)  # adjust limits and step as needed
 
         # Default range for decision thresholds.
         if decision_thresholds is None:
@@ -497,7 +497,7 @@ class ModelComparisonAnalysis:
         import tensorflow as tf
 
         if pt_thresholds is None:
-            pt_thresholds = np.arange(0, 1000, 4)
+            pt_thresholds = np.arange(0, 5000, 4)
 
         if decision_thresholds is None:
             decision_thresholds = np.linspace(0, 1, 300)
@@ -600,7 +600,7 @@ class ModelComparisonAnalysis:
 
         plt.xlabel("Trigger Rate [kHz]")
         plt.ylabel("Signal Efficiency")
-        plt.xlim(0, 120)
+        #plt.xlim(0, 120)
         plt.title("Signal Efficiency vs Trigger Rate Comparison Across nconst Values")
         plt.legend(loc="best", fontsize=9)
         plt.grid(True, linestyle="--", linewidth=0.5)
@@ -703,7 +703,7 @@ class ModelComparisonAnalysis:
         import tensorflow as tf
 
         if pt_thresholds is None:
-            pt_thresholds = np.arange(0, 1000, 5)
+            pt_thresholds = np.arange(0, 5000, 5)
 
         plt.figure(figsize=(12, 8))
 
@@ -728,7 +728,7 @@ class ModelComparisonAnalysis:
             baseline_rate.append(rate)
 
         # Find the index corresponding to the pt cut of 126.
-        pt_cut_value = 126
+        pt_cut_value = 180
         idx_126 = np.abs(pt_thresholds - pt_cut_value).argmin()
         baseline_rate_126 = baseline_rate[idx_126]
         baseline_eff_126 = baseline_eff[idx_126]
@@ -774,12 +774,12 @@ class ModelComparisonAnalysis:
         import numpy as np, matplotlib.pyplot as plt, tensorflow as tf, os
 
         if pt_thresholds is None:
-            pt_thresholds = np.arange(0, 300, 1)
+            pt_thresholds = np.arange(0, 5000, 1)
         if decision_thresholds is None:
             decision_thresholds = np.array([0.7, 0.8, 0.9, 0.95, 0.99])
 
-        target_rates_khz = [58]        
-        ref_ptcuts       = [50, 70, 80, 100, 110, 126]  
+        target_rates_khz = [4000]        
+        ref_ptcuts       = [50, 70, 80, 100, 110, 120, 130, 140, 150, 160, 170, 180, 200]  
 
         # --------------------------------------------------------------------
         model = self.load_model_for_nconst(nconst)
@@ -851,10 +851,10 @@ class ModelComparisonAnalysis:
         # -------------------------------------------------------------------- #
         ax1.set_xlabel("Top-level $p_{T}$ cut [GeV]")
         ax1.set_ylabel("Trigger Rate [kHz]")
-        ax1.set_xlim(80, 150)
-        ax2.set_xlim(80, 150)
+        ax1.set_xlim(80, 200)
+        ax2.set_xlim(80, 200)
         ax1.set_ylim(0, 280)
-        ax2.set_ylim(0.45,0.9)
+        ax2.set_ylim(0.0,0.9)
         ax2.set_ylabel("Signal Efficiency")
         plt.title("Rate vs $p_{T}$ and Signal Efficiency with" f" eta < {fixed_eta} and mass > {fixed_mass}")
         plt.grid(True, ls="--", lw=0.5)
@@ -987,12 +987,12 @@ class ModelComparisonAnalysis:
         import numpy as np, matplotlib.pyplot as plt, tensorflow as tf, os
 
         if mass_thresholds is None:
-            mass_thresholds = np.arange(0, 100, 1)
+            mass_thresholds = np.arange(0, 400, 1)
         if decision_thresholds is None:
             decision_thresholds = np.array([0.5, 0.8, 0.9, 0.95, 0.99])
 
         target_rates_khz = [58]        
-        ref_masscuts = [5, 10, 15, 20, 25, ]  
+        ref_masscuts = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]  
 
         # --------------------------------------------------------------------
         model = self.load_model_for_nconst(nconst)
@@ -1065,8 +1065,8 @@ class ModelComparisonAnalysis:
         ax1.set_xlabel("Top-level mass cut [GeV]")
         ax1.set_ylabel("Trigger Rate [kHz]")
         ax2.set_ylabel("Signal Efficiency")
-        ax1.set_xlim(0, 40)
-        ax2.set_ylim(0.4, 1)
+        ax1.set_xlim(0, 170)
+        ax2.set_ylim(0, 1)
         plt.title("Rate vs mass and Signal Efficiency with" f" eta < {fixed_eta}")
         plt.grid(True, ls="--", lw=0.5)
         lines1, labels1 = ax1.get_legend_handles_labels()

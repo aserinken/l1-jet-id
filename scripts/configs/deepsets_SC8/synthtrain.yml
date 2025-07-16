@@ -6,13 +6,42 @@ data_hyperparams:
 
   nconst: 8
 
-  kfolds: 2
+  kfolds: 1
 
   datasets:
     all:
-      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/sc8_with_classes.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ggHHbbbb_PU200_1752066248/data/ggHHbbbb_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ggHHbbtt_PU200_1752066550/data/ggHHbbtt_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/GluGluHHTo2B2Tau_PU200_1750073940/data/GluGluHHTo2B2Tau_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/GluGluHHTo4B_PU200_1750073931/data/GluGluHHTo4B_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/GluGluHToGG_PU200_1750073913/data/GluGluHToGG_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/GluGluHToTauTau_PU200_1750073876/data/GluGluHToTauTau_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/lightHbb_M20to80_Pt50to200_1750080216/data/HHTo4B_Mass20To80_Pt50To200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/MinBias_PU200_1750074297/data/MinBias_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/MSJ_caseA_1750072201/data/MSJ_caseA.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/MSJ_caseAll_dm20_1750074155/data/MSJ_caseAll_dm20.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/MSJ_caseAll_dm8_1750074212/data/MSJ_caseAll_dm8.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/MSJ_caseC_1750074092/data/MSJ_caseC.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/QCDInclusive_PU200_1752062276/data/QCDInclusive_PU200.root"
+      #- "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/QCD_Pt120To170_PU200_1750074334/data/QCD_Pt120To170_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/QCD_Pt15To3000_PU200_1750077989/data/QCD_Pt15To3000_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/SingleNeutrino_PU200_1750078492/data/SingleNeutrino_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/TT_old_PU200_1752068823/data/TT_old_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/TT_PU200_1750078637/data/TT_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/TTToSemileptonic_PU200_1750078607/data/TTToSemileptonic_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/VBFHToBB_PU200_1750078663/data/VBFHToBB_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/VBFHToCC_PU200_1750078689/data/VBFHToCC_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/WJetsToLNu_PU200_1750078721/data/WJetsToLNu_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/XtoHH_MX_1000To4000_PU200_1750078744/data/XtoHH_MX_1000To4000_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/XtoHH_MX_500To1000_PU200_1750078769/data/XtoHH_MX_500To1000_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ZToQQ_M100_PU200_1752063419/data/ZToQQ_M100_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ZToQQ_M125_PU200_1752063540/data/ZToQQ_M125_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ZToQQ_M150_PU200_1752063656/data/ZToQQ_M150_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ZToQQ_M200_PU200_1752063871/data/ZToQQ_M200_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ZToQQ_M250_PU200_1752064011/data/ZToQQ_M250_PU200.root"
+      - "root://eosuser.cern.ch//eos/cms/store/group/dpg_trigger/comm_trigger/L1Trigger/lroberts/jetTaggingInputs_withClasses/ZToQQ_M300_PU200_1752064067/data/ZToQQ_M300_PU200.root"
 
-  test_size: 0.20
+  test_size: 0.25
   random_state: 42
 
 model_type: "sinvariant"
